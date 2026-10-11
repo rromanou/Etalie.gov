@@ -6432,19 +6432,39 @@ async function bqChargerTout() {
 
 async function bqOuvrirDetail(banqueId) {
   const zone = document.getElementById('bq-detail');
-  const [{ data: capitaux }, { data: adhesions }] = await Promise.all([
-    sb.rpc('banque_mes_capitaux', { p_banque_id: banqueId }), rpcSafe('banque_demandes_adhesion', { p_banque_id: banqueId })
-  ]);
-  zone.innerHTML = `
-    <div class="pc-carte" style="background:var(--blanc-casse);">
-      <h4>Gestion de la banque</h4>
-      <h5>Capitaux détenus (banque à conseil)</h5>
+  const banque = bqBanquesCache[banqueId];
+  if (!banque) { zone.innerHTML = '<p class="pc-erreur">Banque introuvable.</p>'; return; }
+  const { data: adhesions } = await rpcSafe('banque_demandes_adhesion', { p_banque_id: banqueId });
+
+  let zoneTypeHTML = '';
+  if (banque.type === 'conseil') {
+    const { data: capitaux } = await sb.rpc('banque_mes_capitaux', { p_banque_id: banqueId });
+    zoneTypeHTML = `
+      <h5>Capitaux détenus</h5>
       ${(capitaux || []).length ? capitaux.map(c => `<p class="pm-mini">${escHtml(c.entreprise)} — ${c.pourcentage}% — ${fmtR(c.solde)} R$ accumulés
         <button class="pc-lien" data-bq-retirer-capital="${c.entreprise_id}">Retirer vers la banque</button></p>`).join('') : '<p class="pm-mini">Aucun.</p>'}
       <div class="pc-champ"><label>Investir : ID de l'entreprise</label><input type="text" id="bq-inv-entreprise"></div>
       <div class="pc-champ"><label>Pourcentage à acheter</label><input type="number" step="0.01" id="bq-inv-pct"></div>
       <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="bq-investir">Investir</button>
-      <div id="bq-gestion-message"></div>
+      <div id="bq-gestion-message"></div>`;
+  } else {
+    const couverture = banque.total_fructification > 0 ? (banque.tresorerie / banque.total_fructification * 100).toFixed(2) : '0.00';
+    zoneTypeHTML = `
+      <h5>Réserve du propriétaire</h5>
+      <p class="pm-mini">Réserve actuelle : ${fmtR(banque.tresorerie)} R$ — couvre ${couverture}% du total des comptes à fructification (${fmtR(banque.total_fructification)} R$).</p>
+      <div class="pc-champ"><label>Ajouter des fonds de votre poche</label><input type="number" step="0.01" min="0" id="bq-fruct-ajouter-montant"></div>
+      <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="bq-fruct-ajouter">Ajouter à la réserve</button>
+      <div class="pc-champ" style="margin-top:8px;"><label>Retirer de la réserve vers (nom d'utilisateur)</label><input type="text" id="bq-fruct-retirer-username"></div>
+      <div class="pc-champ"><label>Montant</label><input type="number" step="0.01" min="0" id="bq-fruct-retirer-montant"></div>
+      <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-fruct-retirer">Retirer vers ce membre</button>
+      <div id="bq-gestion-message"></div>`;
+  }
+
+  zone.innerHTML = `
+    <div class="pc-carte" style="background:var(--blanc-casse);">
+      <h4>Gestion de la banque — ${escHtml(banque.nom)}</h4>
+      <p class="pm-mini">ID : ${escHtml(banqueId)} — type : ${banque.type === 'conseil' ? 'à conseil' : 'à fructification'}</p>
+      ${zoneTypeHTML}
 
       <h5 style="margin-top:12px;">Propriétaire seulement</h5>
       <div class="pc-champ"><label>Nouveau conseiller (vide = vous-même)</label><input type="text" id="bq-nouveau-conseiller"></div>
@@ -6459,15 +6479,31 @@ async function bqOuvrirDetail(banqueId) {
           <button class="pc-lien" data-bq-adh-refuser="${a.id}">Refuser</button></p>`).join('')}` : ''}
     </div>`;
 
-  zone.querySelectorAll('[data-bq-retirer-capital]').forEach(b => b.onclick = async () => {
-    const { error } = await sb.rpc('banque_retirer_capital', { p_banque_id: banqueId, p_entreprise_id: b.dataset.bqRetirerCapital });
-    if (error) alert(error.message); else bqOuvrirDetail(banqueId);
-  });
-  document.getElementById('bq-investir').onclick = async () => {
-    const { error } = await sb.rpc('banque_investir_capital', { p_banque_id: banqueId, p_entreprise_id: document.getElementById('bq-inv-entreprise').value, p_pourcentage: Number(document.getElementById('bq-inv-pct').value) });
-    entMsg('bq-gestion-message', error, 'Investi.');
-    if (!error) bqOuvrirDetail(banqueId);
-  };
+  if (banque.type === 'conseil') {
+    zone.querySelectorAll('[data-bq-retirer-capital]').forEach(b => b.onclick = async () => {
+      const { error } = await sb.rpc('banque_retirer_capital', { p_banque_id: banqueId, p_entreprise_id: b.dataset.bqRetirerCapital });
+      if (error) alert(error.message); else bqOuvrirDetail(banqueId);
+    });
+    document.getElementById('bq-investir').onclick = async () => {
+      const { error } = await sb.rpc('banque_investir_capital', { p_banque_id: banqueId, p_entreprise_id: document.getElementById('bq-inv-entreprise').value, p_pourcentage: Number(document.getElementById('bq-inv-pct').value) });
+      entMsg('bq-gestion-message', error, 'Investi.');
+      if (!error) bqOuvrirDetail(banqueId);
+    };
+  } else {
+    document.getElementById('bq-fruct-ajouter').onclick = async () => {
+      const { error } = await sb.rpc('banque_fructification_ajouter_fonds', { p_banque_id: banqueId, p_montant: Number(document.getElementById('bq-fruct-ajouter-montant').value) });
+      entMsg('bq-gestion-message', error, 'Fonds ajoutés à la réserve.');
+      if (!error) { await bqChargerTout(); bqOuvrirDetail(banqueId); }
+    };
+    document.getElementById('bq-fruct-retirer').onclick = async () => {
+      const { error } = await sb.rpc('banque_fructification_retirer_vers', {
+        p_banque_id: banqueId, p_destinataire_username: document.getElementById('bq-fruct-retirer-username').value,
+        p_montant: Number(document.getElementById('bq-fruct-retirer-montant').value)
+      });
+      entMsg('bq-gestion-message', error, 'Montant versé.');
+      if (!error) { await bqChargerTout(); bqOuvrirDetail(banqueId); }
+    };
+  }
   document.getElementById('bq-maj-conseiller').onclick = async () => {
     const { error } = await sb.rpc('banque_modifier_conseiller', { p_banque_id: banqueId, p_conseiller_username: document.getElementById('bq-nouveau-conseiller').value || null });
     if (error) alert(error.message); else bqChargerTout();
