@@ -6381,8 +6381,11 @@ async function initialiserPanneauBanques() {
   bqChargerTout();
 }
 
+let bqBanquesCache = {};
+
 async function bqChargerTout() {
   const [{ data: mesComptes }, { data: banques }] = await Promise.all([sb.rpc('mes_comptes_bancaires'), sb.rpc('liste_banques')]);
+  bqBanquesCache = {}; (banques || []).forEach(b => { bqBanquesCache[b.id] = b; });
   document.getElementById('bq-mes-comptes').innerHTML = (mesComptes || []).length ? mesComptes.map(c => `
     <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(c.nom)}</strong> (${escHtml(c.type)})${c.publique ? ' — publique' : ''}
       <span>${fmtR(c.solde)} R$</span></div>
@@ -6413,6 +6416,7 @@ async function bqChargerTout() {
   document.getElementById('bq-toutes-banques').innerHTML = (banques || []).length ? banques.map(b => `
     <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(b.nom)}</strong> (${escHtml(b.type)})${b.publique ? ' — publique' : ''}
       <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer; font-size:.78rem; padding:6px 14px;" data-bq-ouvrir="${b.id}">Gérer</button></div>
+      <p class="pm-mini">ID : ${escHtml(b.id)}</p>
       <p class="pm-mini">Propriétaire : @${escHtml(b.proprietaire)}${b.conseiller && b.conseiller !== b.proprietaire ? ' — conseiller : @' + escHtml(b.conseiller) : ''}</p>
       ${b.description ? `<p class="pm-mini">${escHtml(b.description)}</p>` : ''}
       ${b.publique && !idsMesComptes.has(b.id) ? `<button class="pc-lien" data-bq-demander-adhesion="${b.id}">Demander l'adhésion</button>` : ''}
