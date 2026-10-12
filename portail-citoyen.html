@@ -403,9 +403,11 @@ async function trouverDansRegistreCAS(codeEncrypte, forcerRechargement) {
 const PROVINCES_RESIDENCE = [
   "Gibaltage","Talon Étalien","Talon Andrien","Fleury","Baxe","Vénésie","Marcio","Romagna",
   "Grâdes-Tivainne","Aloies","Balques","Alanbie-Brien-Jance","Île Saint-Étienne","Ombrie","Vénéz","Milela",
-  "Pruxe","Quoueta-Et-Milenniar-Étalois","Tonawa","Côte-Anglaise","Grande-Capitale","Zone Haute-Romanie",
-  "Île-de-L'île","Bushard Bay","Braume","Nouvelle-Braume-Chiranie","Haute-Étalie-du-Glaive","Zone Dovintski",
-  "Grand-Nord","Hors-Orremaux","Nouvelle-Étalie","Alten","Basse-Alten","Waterland"
+  "Pruxe","Quoueta-Et-Milenniar-Étalois","Terre de Towana","Côte-Anglaise","Grande-Capitale","Zone Haute-Romanie",
+  "Bushard Bay","Hors-Grande-Vénésie","Nouvelle-Braume-Chiranie","Haute-Étalie-du-Glaive","Zone Dovintski",
+  "Alten","Grand-Nord","Terre des Opalves","Terre des Tousques","Terre des Bosbins","Alonse","Braume",
+  "Nouvelle-Étalie","Nord","Chiranie","Basse-Alten","Centre","Sud-Oriental","Sud-Occidental","Sud-Nordique",
+  "Muslimanie","Place du Roy"
 ];
 
 const CIBLES_CONTACT = [
@@ -451,9 +453,13 @@ function afficherBlocageAcces(data) {
   let titre = 'Accès refusé', texte = '', avecNip = false;
   if (data.raison === 'banni') { titre = 'Compte banni'; texte = data.motif || 'Votre compte a été banni définitivement.'; }
   else if (data.raison === 'suspendu') { titre = 'Compte suspendu temporairement'; texte = (data.motif || 'Votre compte est temporairement suspendu.') + (data.jusqu_a ? ' Jusqu\'au ' + new Date(data.jusqu_a).toLocaleString('fr-FR') + '.' : ''); }
+  else if (data.raison === 'emprisonne') { titre = 'Vous êtes incarcéré'; texte = 'Sortie prévue le ' + new Date(data.jusqu_a).toLocaleString('fr-FR') + '.'; }
   else { titre = 'Portail temporairement indisponible'; texte = data.message || 'Le portail est temporairement désactivé par le gouvernement.'; avecNip = true; }
   app.innerHTML = `<div class="pc-carte" style="max-width:520px; margin:60px auto;">
     <h3>${escHtml(titre)}</h3><p>${escHtml(texte)}</p>
+    ${data.raison === 'emprisonne' && data.casier && data.casier.length ? `
+    <h5 style="margin-top:14px;">Casier judiciaire</h5>
+    ${data.casier.map(c => `<p class="pm-mini">${escHtml(c.nom_palier)} — ${escHtml(c.titre)} — ${new Date(c.date_infraction).toLocaleDateString('fr-FR')}${c.statut === 'annule' ? ' (annulée)' : ''}</p>`).join('')}` : ''}
     ${avecNip ? `
     <div class="pc-champ" style="margin-top:20px;"><label for="nip-urgence">NIP administrateur (8 chiffres)</label><input type="password" id="nip-urgence" maxlength="8" inputmode="numeric"></div>
     <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="nip-urgence-valider">Entrer</button>
@@ -1039,6 +1045,7 @@ async function chargerTableauDeBord(utilisateur) {
       <button data-onglet="marche-public">Marché public</button>
       <button data-onglet="autochtone">Famille autochtone</button>
       <button data-onglet="bureau-poste">Bureau de poste</button>
+      <button data-onglet="police">Commissariat</button>
       ${banquesAccessibles.length ? '<button data-onglet="presse">Presse monétaire</button>' : ''}
       ${citoyen.est_agent_paix ? '<button data-onglet="agent">Agent de la paix</button>' : ''}
       ${citoyen.est_admin ? '<button data-onglet="admin">Administration</button>' : ''}
@@ -1055,7 +1062,7 @@ async function chargerTableauDeBord(utilisateur) {
             <tr><td>Date de naissance</td><td>${citoyen.date_naissance}</td></tr>
             <tr><td>Âge toutouïen à l'inscription</td><td>${Number(citoyen.age_toutouien_inscription).toFixed(2)} ans</td></tr>
             <tr><td>Dossier créé le</td><td>${new Date(citoyen.cree_le).toLocaleDateString('fr-FR')}</td></tr>
-            <tr><td>Province de résidence</td><td>${citoyen.province_residence || '—'}</td></tr>
+            <tr><td>Province de résidence</td><td>${citoyen.province_residence || '—'}${citoyen.territoire_du_roy ? ' + Territoire du Roy (0% de taxe, aucun commerce)' : ''}</td></tr>
             <tr><td>Expiration du CAS</td><td>${monStatut ? monStatut.date_expiration : '—'}</td></tr>
             <tr><td>CAS à renouvellement protégé (service gouvernemental)</td><td>${monStatut && monStatut.protege_gouvernement ? 'Oui' : 'Non'}</td></tr>
             <tr><td>Agent de la paix</td><td>${citoyen.est_agent_paix ? 'Oui' : 'Non'}</td></tr>
@@ -1330,6 +1337,7 @@ async function chargerTableauDeBord(utilisateur) {
     ${panneauMarchePublicHTML()}
     ${panneauAutochtoneHTML()}
     ${panneauBureauPosteHTML()}
+    ${panneauPoliceHTML()}
     ${banquesAccessibles.length ? panneauPresseHTML() : ''}
     ${citoyen.est_agent_paix ? panneauAgentHTML() : ''}
     ${citoyen.est_admin ? panneauAdminHTML() : ''}
@@ -1348,7 +1356,7 @@ async function chargerTableauDeBord(utilisateur) {
     btn.onclick = () => {
       document.querySelectorAll('.pc-onglets button[data-onglet]').forEach(b => b.classList.remove('actif'));
       btn.classList.add('actif');
-      ['profil', 'paiements', 'permis', 'constats', 'epargne', 'messages', 'signatures', 'documents', 'contacter', 'tableaubord', 'argentattendu', 'recompenses', 'entreprise', 'releves', 'infos', 'confiance', 'releve-mensuel', 'conseiller', 'marche-interieur', 'marche-exterieur', 'documents-gouv', 'brevets', 'banques', 'marche-public', 'autochtone', 'bureau-poste', 'presse', 'agent', 'admin'].forEach(o => {
+      ['profil', 'paiements', 'permis', 'constats', 'epargne', 'messages', 'signatures', 'documents', 'contacter', 'tableaubord', 'argentattendu', 'recompenses', 'entreprise', 'releves', 'infos', 'confiance', 'releve-mensuel', 'conseiller', 'marche-interieur', 'marche-exterieur', 'documents-gouv', 'brevets', 'banques', 'marche-public', 'autochtone', 'bureau-poste', 'police', 'presse', 'agent', 'admin'].forEach(o => {
         const el = document.getElementById('onglet-' + o);
         if (el) el.classList.toggle('pc-masque', o !== btn.dataset.onglet);
       });
@@ -1391,6 +1399,7 @@ async function chargerTableauDeBord(utilisateur) {
   initialiserPanneauMarchePublic();
   initialiserPanneauAutochtone();
   initialiserPanneauBureauPoste();
+  initialiserPanneauPolice();
   synchroniserCIBEtRapports();
 
   demarrerTicker(utilisateur.id, citoyen);
@@ -2591,6 +2600,32 @@ function panneauAdminHTML() {
         <div id="a-message-envoi"></div>
         <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="a-envoyer">Envoyer</button>
       </div>
+
+      <div class="pc-carte">
+        <h3>Créer un commissariat</h3>
+        <div class="pc-champ"><label>Nom</label><input type="text" id="a-com-nom"></div>
+        <div class="pc-champ"><label>Type</label><select id="a-com-type">
+          <option value="police">Police</option>
+          <option value="police_militaire">Police militaire</option>
+          <option value="police_royale_militaire">Police royale militaire</option>
+          <option value="royal">Royal</option>
+        </select></div>
+        <div class="pc-champ"><label>Directeur (nom d'utilisateur)</label><input type="text" id="a-com-directeur"></div>
+        <div class="pc-champ"><label>Adresse</label><input type="text" id="a-com-adresse"></div>
+        <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="a-com-creer">Créer</button>
+        <div id="a-com-message"></div>
+      </div>
+
+      <div class="pc-carte">
+        <h3>Territoire du Roy</h3>
+        <p class="pm-mini">S'ajoute à la province d'habitation d'un citoyen sans la remplacer — 0% de taxe, aucun commerce. Attribution manuelle uniquement.</p>
+        <div class="pc-champ"><label>Nom d'utilisateur</label><input type="text" id="a-troy-username"></div>
+        <div class="pm-ligne-boutons">
+          <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="a-troy-attribuer">Attribuer</button>
+          <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="a-troy-retirer">Retirer</button>
+        </div>
+        <div id="a-troy-message"></div>
+      </div>
     </div>
   `;
 }
@@ -2925,6 +2960,21 @@ function initialiserPanneauAdmin() {
   chargerDemandesEntreprisesAdmin();
   chargerModeCreationEntreprise();
   initialiserGestionComptesAdmin();
+  document.getElementById('a-com-creer').onclick = async () => {
+    const { error } = await sb.rpc('gouv_creer_comisseriat', {
+      p_nom: document.getElementById('a-com-nom').value, p_type: document.getElementById('a-com-type').value,
+      p_directeur_username: document.getElementById('a-com-directeur').value, p_adresse: document.getElementById('a-com-adresse').value || null
+    });
+    entMsg('a-com-message', error, 'Commissariat créé.');
+  };
+  document.getElementById('a-troy-attribuer').onclick = async () => {
+    const { error } = await sb.rpc('gouv_attribuer_territoire_roy', { p_username: document.getElementById('a-troy-username').value });
+    entMsg('a-troy-message', error, 'Territoire du Roy attribué.');
+  };
+  document.getElementById('a-troy-retirer').onclick = async () => {
+    const { error } = await sb.rpc('gouv_retirer_territoire_roy', { p_username: document.getElementById('a-troy-username').value });
+    entMsg('a-troy-message', error, 'Territoire du Roy retiré.');
+  };
   initialiserMaintenanceAdmin();
   chargerBanquesAdmin();
   chargerContestationsConstatsAdmin();
@@ -7051,6 +7101,204 @@ async function bpChargerMesAffiliations() {
     const { error: err } = await sb.rpc('bureau_poste_dissocier', { p_id: b.dataset.bpDissocier });
     if (err) alert(err.message); else bpChargerMesAffiliations();
   });
+}
+
+/* =====================================================================
+   COMMISSARIAT / POLICE / CASIER JUDICIAIRE
+   ===================================================================== */
+function panneauPoliceHTML() {
+  return `
+    <div id="onglet-police" class="pc-masque">
+      <div class="pc-carte">
+        <h3>Mon poste</h3>
+        <div id="pol-mon-poste"><p class="pm-mini">Chargement…</p></div>
+      </div>
+      <div class="pc-carte">
+        <h3>Commissariats</h3>
+        <div id="pol-liste-commissariats"><p class="pm-mini">Chargement…</p></div>
+      </div>
+      <div class="pc-carte" id="pol-gestion-carte" style="display:none;">
+        <h3>Gestion du commissariat</h3>
+        <div id="pol-gestion"></div>
+      </div>
+      <div class="pc-carte" id="pol-infraction-carte" style="display:none;">
+        <h3>Dresser une infraction</h3>
+        <div class="pc-champ"><label>Citoyen (nom d'utilisateur)</label><input type="text" id="pol-inf-username"></div>
+        <div class="pc-champ"><label>Palier</label>
+          <select id="pol-inf-palier">
+            <option value="1">1 — Infraction mineure</option>
+            <option value="2">2 — Délit</option>
+            <option value="3">3 — Délit grave</option>
+            <option value="4">4 — Crime</option>
+            <option value="5">5 — Crime contre l'humanité</option>
+            <option value="6">6 — Crime contre la Couronne</option>
+          </select>
+        </div>
+        <div class="pc-champ"><label>Titre</label><input type="text" id="pol-inf-titre"></div>
+        <div class="pc-champ"><label>Description</label><textarea id="pol-inf-description"></textarea></div>
+        <div class="pc-champ"><label>Lieu</label><input type="text" id="pol-inf-lieu"></div>
+        <div class="pc-champ"><label>Témoins</label><input type="text" id="pol-inf-temoins"></div>
+        <div class="pc-champ"><label>Preuve (PDF/image, optionnel)</label><input type="file" id="pol-inf-preuve"></div>
+        <div class="pc-champ"><label>Amende (R$)</label><input type="number" step="0.01" min="0" id="pol-inf-amende" value="0"></div>
+        <div class="pc-champ"><label>Peine de prison (jours)</label><input type="number" step="0.01" min="0" id="pol-inf-duree" value="0"></div>
+        <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="pol-inf-dresser">Dresser l'infraction</button>
+        <div id="pol-inf-message"></div>
+      </div>
+      <div class="pc-carte">
+        <h3>Casier judiciaire</h3>
+        <div class="pc-champ"><label>Nom d'utilisateur</label><input type="text" id="pol-casier-username"></div>
+        <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="pol-casier-chercher">Consulter</button>
+        <div id="pol-casier-resultat"></div>
+      </div>
+    </div>`;
+}
+
+let polMonPoste = null;
+
+async function initialiserPanneauPolice() {
+  const { data: poste } = await sb.rpc('mon_poste_police');
+  polMonPoste = poste;
+  const zone = document.getElementById('pol-mon-poste');
+  zone.innerHTML = poste ? `
+    <p class="pm-mini">Commissariat : <strong>${escHtml(poste.comisseriat_nom)}</strong> (${escHtml(poste.comisseriat_type)})</p>
+    <p class="pm-mini">Matricule : ${escHtml(poste.matricule)} — Grade : ${escHtml(poste.nom_grade)} (${poste.sous_grade === 3 ? '1re' : poste.sous_grade === 2 ? '2e' : '3e'} classe)${poste.est_directeur ? ' — Directeur' : ''}</p>
+    <div class="pc-champ"><label>Commissariat de destination (ID)</label><input type="text" id="pol-transfert-dest"></div>
+    <button class="pc-lien" id="pol-demander-transfert">Demander un transfert</button>
+    <div id="pol-transfert-message"></div>` : '<p class="pm-mini">Vous n\'occupez aucun poste policier actuellement.</p>';
+
+  if (poste) {
+    document.getElementById('pol-demander-transfert').onclick = async () => {
+      const { error } = await sb.rpc('comisseriat_demander_transfert', { p_comisseriat_dest: document.getElementById('pol-transfert-dest').value });
+      entMsg('pol-transfert-message', error, 'Demande de transfert envoyée.');
+    };
+    document.getElementById('pol-infraction-carte').style.display = '';
+  }
+
+  const { data: commissariats } = await sb.rpc('liste_comisseriats');
+  const zoneListe = document.getElementById('pol-liste-commissariats');
+  zoneListe.innerHTML = (commissariats || []).length ? commissariats.map(c => `
+    <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(c.nom)}</strong> (${escHtml(c.type)})
+      ${(poste && poste.est_directeur && poste.comisseriat_id === c.id) || (poste && poste.comisseriat_id === c.id) ? `<button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer; font-size:.78rem; padding:6px 14px;" data-pol-gerer="${c.id}">Gérer</button>` : ''}</div>
+      <p class="pm-mini">ID : ${escHtml(c.id)} — Directeur : @${escHtml(c.directeur || '—')} — effectif : ${c.effectif}${c.adresse ? ' — ' + escHtml(c.adresse) : ''}</p>
+    </div>`).join('') : '<p class="pm-mini">Aucun commissariat.</p>';
+  zoneListe.querySelectorAll('[data-pol-gerer]').forEach(b => b.onclick = () => polOuvrirGestion(b.dataset.polGerer));
+
+  document.getElementById('pol-casier-chercher').onclick = async () => {
+    const username = document.getElementById('pol-casier-username').value;
+    const zoneC = document.getElementById('pol-casier-resultat');
+    const { data, error } = await sb.rpc('casier_judiciaire_public', { p_username: username });
+    if (error) { zoneC.innerHTML = `<p class="pc-erreur">${escHtml(error.message)}</p>`; return; }
+    zoneC.innerHTML = (data || []).length ? data.map(c => `
+      <p class="pm-mini">${escHtml(c.nom_palier)} — ${escHtml(c.titre)} — ${new Date(c.date_infraction).toLocaleDateString('fr-FR')} — <em>${c.statut === 'annule' ? 'annulée' : 'condamnation'}</em></p>`).join('') : '<p class="pm-mini">Casier vierge.</p>';
+    if (poste) {
+      zoneC.innerHTML += `<button class="pc-lien" id="pol-casier-complet">Voir le détail complet (policiers)</button><div id="pol-casier-complet-zone"></div>`;
+      document.getElementById('pol-casier-complet').onclick = async () => {
+        const { data: det, error: errDet } = await sb.rpc('casier_judiciaire_complet_par_username', { p_username: username });
+        const zd = document.getElementById('pol-casier-complet-zone');
+        if (errDet) { zd.innerHTML = `<p class="pc-erreur">${escHtml(errDet.message)}</p>`; return; }
+        zd.innerHTML = (det || []).length ? det.map(c => `
+          <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(c.nom_palier)}</strong> — ${escHtml(c.titre)} — <em>${c.statut === 'annule' ? 'annulée' : 'condamnation'}</em></div>
+            <p class="pm-mini">${escHtml(c.description)}</p>
+            <p class="pm-mini">Agent : @${escHtml(c.agent)} — ${escHtml(c.comisseriat)} — lieu : ${escHtml(c.lieu || '—')} — témoins : ${escHtml(c.temoins || '—')}</p>
+            <p class="pm-mini">Amende : ${fmtR(c.amende)} R$ — prison : ${c.duree_prison_jours} jour(s)${c.peine_fin ? ' (jusqu\'au ' + new Date(c.peine_fin).toLocaleDateString('fr-FR') + ')' : ''}</p>
+            ${c.statut === 'annule' ? `<p class="pm-mini">Motif d'annulation : ${escHtml(c.motif_annulation || '')}</p>` : `<button class="pc-lien" data-pol-annuler="${c.id}">Annuler cette infraction</button>`}
+          </div>`).join('') : '<p class="pm-mini">Aucune.</p>';
+        zd.querySelectorAll('[data-pol-annuler]').forEach(b => b.onclick = async () => {
+          const motif = prompt('Motif d\'annulation :');
+          if (!motif) return;
+          const { error: errA } = await sb.rpc('comisseriat_annuler_infraction', { p_id: b.dataset.polAnnuler, p_motif: motif });
+          if (errA) alert(errA.message); else document.getElementById('pol-casier-complet').click();
+        });
+      };
+    }
+  };
+
+  document.getElementById('pol-inf-dresser').onclick = async () => {
+    try {
+      let preuves = [];
+      const fichier = document.getElementById('pol-inf-preuve').files[0];
+      if (fichier) {
+        const { data: { user } } = await sb.auth.getUser();
+        const chemin = `${user.id}/${Date.now()}-${fichier.name}`;
+        const { error: errUpload } = await sb.storage.from('documents-citoyens').upload(chemin, fichier);
+        if (errUpload) throw errUpload;
+        preuves = [chemin];
+      }
+      const { error } = await sb.rpc('comisseriat_dresser_infraction', {
+        p_citoyen_username: document.getElementById('pol-inf-username').value,
+        p_palier: Number(document.getElementById('pol-inf-palier').value),
+        p_titre: document.getElementById('pol-inf-titre').value,
+        p_description: document.getElementById('pol-inf-description').value,
+        p_lieu: document.getElementById('pol-inf-lieu').value || null,
+        p_preuves: preuves, p_temoins: document.getElementById('pol-inf-temoins').value || null,
+        p_amende: Number(document.getElementById('pol-inf-amende').value) || 0,
+        p_duree_prison_jours: Number(document.getElementById('pol-inf-duree').value) || 0
+      });
+      entMsg('pol-inf-message', error, 'Infraction dressée.');
+    } catch (err) { entMsg('pol-inf-message', err); }
+  };
+}
+
+async function polOuvrirGestion(comisseriatId) {
+  document.getElementById('pol-gestion-carte').style.display = '';
+  const zone = document.getElementById('pol-gestion');
+  const [{ data: membres }, { data: demandes }] = await Promise.all([
+    sb.rpc('comisseriat_membres', { p_comisseriat_id: comisseriatId }),
+    rpcSafe('mes_demandes_transfert_recues')
+  ]);
+  zone.innerHTML = `
+    <h5>Embaucher</h5>
+    <div class="pc-champ"><label>Nom d'utilisateur</label><input type="text" id="pol-embaucher-username"></div>
+    <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="pol-embaucher">Embaucher (Cadet)</button>
+    <div id="pol-embaucher-message"></div>
+
+    <h5 style="margin-top:12px;">Membres</h5>
+    ${(membres || []).length ? membres.map(m => `
+      <div class="pm-fleet-item"><div class="entete"><strong>@${escHtml(m.username)}</strong> — ${escHtml(m.nom_grade)} (matricule ${escHtml(m.matricule)})</div>
+        <div class="pm-ligne-boutons">
+          <select data-pol-grade="${m.id}">${Array.from({length:15},(_,i)=>i+1).map(g => `<option value="${g}" ${g===m.grade?'selected':''}>${g}. ${escHtml(_nomGradeClient(g))}</option>`).join('')}</select>
+          <select data-pol-sgrade="${m.id}"><option value="1" ${m.sous_grade===1?'selected':''}>3e classe</option><option value="2" ${m.sous_grade===2?'selected':''}>2e classe</option><option value="3" ${m.sous_grade===3?'selected':''}>1re classe</option></select>
+          <button class="pc-lien" data-pol-promouvoir="${m.id}">Appliquer</button>
+          <button class="pc-lien" data-pol-renvoyer="${m.id}">Renvoyer</button>
+        </div></div>`).join('') : '<p class="pm-mini">Aucun membre.</p>'}
+
+    <h5 style="margin-top:12px;">Demandes de transfert reçues</h5>
+    ${(demandes || []).length ? demandes.map(d => `
+      <p class="pm-mini">@${escHtml(d.citoyen)} — depuis ${escHtml(d.comisseriat_source)}
+        <button class="pc-lien" data-pol-transfert-accepter="${d.id}">Accepter</button>
+        <button class="pc-lien" data-pol-transfert-refuser="${d.id}">Refuser</button></p>`).join('') : '<p class="pm-mini">Aucune.</p>'}
+  `;
+  document.getElementById('pol-embaucher').onclick = async () => {
+    const { error } = await sb.rpc('comisseriat_embaucher', { p_comisseriat_id: comisseriatId, p_username: document.getElementById('pol-embaucher-username').value });
+    entMsg('pol-embaucher-message', error, 'Embauché.');
+    if (!error) polOuvrirGestion(comisseriatId);
+  };
+  zone.querySelectorAll('[data-pol-promouvoir]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.polPromouvoir;
+    const { error } = await sb.rpc('comisseriat_promouvoir', {
+      p_membre_id: id, p_grade: Number(document.querySelector(`[data-pol-grade="${id}"]`).value), p_sous_grade: Number(document.querySelector(`[data-pol-sgrade="${id}"]`).value)
+    });
+    if (error) alert(error.message); else polOuvrirGestion(comisseriatId);
+  });
+  zone.querySelectorAll('[data-pol-renvoyer]').forEach(b => b.onclick = async () => {
+    if (!confirm('Renvoyer ce membre ?')) return;
+    const { error } = await sb.rpc('comisseriat_renvoyer', { p_membre_id: b.dataset.polRenvoyer });
+    if (error) alert(error.message); else polOuvrirGestion(comisseriatId);
+  });
+  zone.querySelectorAll('[data-pol-transfert-accepter]').forEach(b => b.onclick = async () => {
+    const { error } = await sb.rpc('comisseriat_traiter_transfert', { p_id: b.dataset.polTransfertAccepter, p_decision: 'acceptee' });
+    if (error) alert(error.message); else polOuvrirGestion(comisseriatId);
+  });
+  zone.querySelectorAll('[data-pol-transfert-refuser]').forEach(b => b.onclick = async () => {
+    const { error } = await sb.rpc('comisseriat_traiter_transfert', { p_id: b.dataset.polTransfertRefuser, p_decision: 'refusee' });
+    if (error) alert(error.message); else polOuvrirGestion(comisseriatId);
+  });
+}
+
+function _nomGradeClient(g) {
+  const noms = ['Cadet','Agent','Agent principal','Caporal','Caporal-chef','Brigadier','Brigadier-chef',
+    'Sergent','Sergent-chef','Lieutenant','Capitaine','Commandant','Inspecteur','Inspecteur-chef','Directeur-adjoint'];
+  return noms[Math.max(1, Math.min(15, g)) - 1];
 }
 
 demarrer();
