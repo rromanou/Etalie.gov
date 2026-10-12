@@ -988,6 +988,11 @@ async function chargerTableauDeBord(utilisateur) {
   const { data: mesAccesBanques } = await sb.rpc('mon_personnel_banque');
   const banquesAccessibles = citoyen.est_admin ? ['H','P','C','L','N','M'] : (mesAccesBanques || []).map(a => a.banque_tag);
   const { data: etatTresor } = citoyen.est_admin ? await sb.rpc('gouv_etat_tresoreries') : { data: null };
+  // Accès réel aux outils d'agent de la paix : un VRAI poste actif dans un
+  // commissariat (ou l'administration) — le drapeau est_agent_paix de
+  // num_CAS.txt n'est plus suffisant (voir patch 24).
+  const { data: monPostePoliceInit } = await rpcSafe('mon_poste_police', {}, null);
+  const accesAgentReel = Boolean(citoyen.est_admin || monPostePoliceInit);
 
   const { data: parametresFiscaux } = await sb.from('parametres_fiscaux').select('taux_preventif').eq('id', 1).single();
   const tauxPreventifActuel = parametresFiscaux ? Number(parametresFiscaux.taux_preventif) : 0;
@@ -1046,8 +1051,9 @@ async function chargerTableauDeBord(utilisateur) {
       <button data-onglet="autochtone">Famille autochtone</button>
       <button data-onglet="bureau-poste">Bureau de poste</button>
       <button data-onglet="police">Commissariat</button>
+      <button data-onglet="militaire">Militaire</button>
       ${banquesAccessibles.length ? '<button data-onglet="presse">Presse monétaire</button>' : ''}
-      ${citoyen.est_agent_paix ? '<button data-onglet="agent">Agent de la paix</button>' : ''}
+      ${accesAgentReel ? '<button data-onglet="agent">Agent de la paix</button>' : ''}
       ${citoyen.est_admin ? '<button data-onglet="admin">Administration</button>' : ''}
     </div>
 
@@ -1338,8 +1344,9 @@ async function chargerTableauDeBord(utilisateur) {
     ${panneauAutochtoneHTML()}
     ${panneauBureauPosteHTML()}
     ${panneauPoliceHTML()}
+    ${panneauMilitaireHTML()}
     ${banquesAccessibles.length ? panneauPresseHTML() : ''}
-    ${citoyen.est_agent_paix ? panneauAgentHTML() : ''}
+    ${accesAgentReel ? panneauAgentHTML() : ''}
     ${citoyen.est_admin ? panneauAdminHTML() : ''}
   `;
 
@@ -1356,7 +1363,7 @@ async function chargerTableauDeBord(utilisateur) {
     btn.onclick = () => {
       document.querySelectorAll('.pc-onglets button[data-onglet]').forEach(b => b.classList.remove('actif'));
       btn.classList.add('actif');
-      ['profil', 'paiements', 'permis', 'constats', 'epargne', 'messages', 'signatures', 'documents', 'contacter', 'tableaubord', 'argentattendu', 'recompenses', 'entreprise', 'releves', 'infos', 'confiance', 'releve-mensuel', 'conseiller', 'marche-interieur', 'marche-exterieur', 'documents-gouv', 'brevets', 'banques', 'marche-public', 'autochtone', 'bureau-poste', 'police', 'presse', 'agent', 'admin'].forEach(o => {
+      ['profil', 'paiements', 'permis', 'constats', 'epargne', 'messages', 'signatures', 'documents', 'contacter', 'tableaubord', 'argentattendu', 'recompenses', 'entreprise', 'releves', 'infos', 'confiance', 'releve-mensuel', 'conseiller', 'marche-interieur', 'marche-exterieur', 'documents-gouv', 'brevets', 'banques', 'marche-public', 'autochtone', 'bureau-poste', 'police', 'militaire', 'presse', 'agent', 'admin'].forEach(o => {
         const el = document.getElementById('onglet-' + o);
         if (el) el.classList.toggle('pc-masque', o !== btn.dataset.onglet);
       });
@@ -1379,7 +1386,7 @@ async function chargerTableauDeBord(utilisateur) {
   initialiserOngletEpargne(citoyen);
   chargerDemandesEpargne(citoyen);
 
-  if (citoyen.est_agent_paix) initialiserPanneauAgent();
+  if (accesAgentReel) initialiserPanneauAgent();
   if (citoyen.est_admin) initialiserPanneauAdmin();
   if (banquesAccessibles.length) initialiserPanneauPresse();
   initialiserPanneauTableauBord();
@@ -1400,6 +1407,7 @@ async function chargerTableauDeBord(utilisateur) {
   initialiserPanneauAutochtone();
   initialiserPanneauBureauPoste();
   initialiserPanneauPolice();
+  initialiserPanneauMilitaire();
   synchroniserCIBEtRapports();
 
   demarrerTicker(utilisateur.id, citoyen);
@@ -2626,6 +2634,34 @@ function panneauAdminHTML() {
         </div>
         <div id="a-troy-message"></div>
       </div>
+
+      <div class="pc-carte">
+        <h3>Accès à une banque publique</h3>
+        <p class="pm-mini">Ajoute ou retire directement un citoyen comme titulaire d'un compte dans une banque privée déclarée publique, sans passer par la demande d'adhésion.</p>
+        <div class="pc-champ"><label>Banque publique</label><select id="a-bq-pub-banque"></select></div>
+        <div class="pc-champ"><label>Nom d'utilisateur</label><input type="text" id="a-bq-pub-username"></div>
+        <div class="pm-ligne-boutons">
+          <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="a-bq-pub-accorder">Accorder l'accès</button>
+          <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="a-bq-pub-retirer">Retirer l'accès</button>
+        </div>
+        <div id="a-bq-pub-message"></div>
+      </div>
+
+      <div class="pc-carte">
+        <h3>Armée — grades et taux</h3>
+        <div class="pc-champ"><label>Nom d'utilisateur</label><input type="text" id="a-mil-username"></div>
+        <div class="pc-champ"><label>Grade</label><select id="a-mil-grade">
+          <option value="">Aucun (retirer)</option>
+          <option value="recrue">Recrue militaire</option>
+          <option value="militaire">Militaire</option>
+          <option value="officier">Officier</option>
+        </select></div>
+        <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="a-mil-assigner">Assigner le grade</button>
+        <div id="a-mil-message"></div>
+        <div class="pc-champ" style="margin-top:12px;"><label>Taux par zombie tué (R$)</label><input type="number" min="0" step="0.01" id="a-mil-taux"></div>
+        <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="a-mil-taux-sauver">Enregistrer le taux</button>
+        <div id="a-mil-taux-message"></div>
+      </div>
     </div>
   `;
 }
@@ -2975,6 +3011,35 @@ function initialiserPanneauAdmin() {
     const { error } = await sb.rpc('gouv_retirer_territoire_roy', { p_username: document.getElementById('a-troy-username').value });
     entMsg('a-troy-message', error, 'Territoire du Roy retiré.');
   };
+
+  rpcSafe('liste_banques_publiques', {}, []).then(({ data }) => {
+    const sel = document.getElementById('a-bq-pub-banque');
+    if (sel) sel.innerHTML = (data || []).map(b => `<option value="${b.id}">${escHtml(b.nom)} (${b.type})</option>`).join('') || '<option value="">Aucune banque publique</option>';
+  });
+  document.getElementById('a-bq-pub-accorder').onclick = async () => {
+    const { error } = await sb.rpc('gouv_accorder_acces_banque_publique', {
+      p_username: document.getElementById('a-bq-pub-username').value, p_banque_id: document.getElementById('a-bq-pub-banque').value
+    });
+    entMsg('a-bq-pub-message', error, 'Accès accordé.');
+  };
+  document.getElementById('a-bq-pub-retirer').onclick = async () => {
+    const { error } = await sb.rpc('gouv_retirer_acces_banque_publique', {
+      p_username: document.getElementById('a-bq-pub-username').value, p_banque_id: document.getElementById('a-bq-pub-banque').value
+    });
+    entMsg('a-bq-pub-message', error, 'Accès retiré.');
+  };
+
+  document.getElementById('a-mil-assigner').onclick = async () => {
+    const { error } = await sb.rpc('gouv_assigner_grade_militaire', {
+      p_username: document.getElementById('a-mil-username').value, p_grade: document.getElementById('a-mil-grade').value || null
+    });
+    entMsg('a-mil-message', error, 'Grade assigné.');
+  };
+  document.getElementById('a-mil-taux-sauver').onclick = async () => {
+    const { error } = await sb.rpc('gouv_definir_taux_militaire', { p_taux: Number(document.getElementById('a-mil-taux').value) });
+    entMsg('a-mil-taux-message', error, 'Taux enregistré.');
+  };
+
   initialiserMaintenanceAdmin();
   chargerBanquesAdmin();
   chargerContestationsConstatsAdmin();
@@ -7299,6 +7364,269 @@ function _nomGradeClient(g) {
   const noms = ['Cadet','Agent','Agent principal','Caporal','Caporal-chef','Brigadier','Brigadier-chef',
     'Sergent','Sergent-chef','Lieutenant','Capitaine','Commandant','Inspecteur','Inspecteur-chef','Directeur-adjoint'];
   return noms[Math.max(1, Math.min(15, g)) - 1];
+}
+
+/* =====================================================================
+   MILITAIRE — onglet + minijeu de tir 2D (zombies)
+   ===================================================================== */
+function panneauMilitaireHTML() {
+  return `
+    <div id="onglet-militaire" class="pc-masque">
+      <div class="pc-carte">
+        <h3>Mon statut militaire</h3>
+        <div id="mil-statut"><p class="pm-mini">Chargement…</p></div>
+        <div id="mil-promotion"></div>
+      </div>
+      <div class="pc-carte">
+        <h3>Mission — élimination de zombies</h3>
+        <p class="pm-mini">Déplacement : flèches ou WASD. Viser : souris. Tirer : clic (maintenu possible). Une mission dure 60 secondes ou jusqu'à ce que vous tombiez. Le paiement (plafonné à 50 tués payés par mission, 5 minutes entre deux missions) est prélevé sur la trésorerie publique.</p>
+        <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="mil-demarrer">Démarrer une mission</button>
+        <div id="mil-mission-message"></div>
+        <div id="mil-jeu-conteneur" style="display:none; margin-top:14px;">
+          <canvas id="mil-canvas" width="760" height="460" style="width:100%; max-width:760px; background:#0b1a0f; border:2px solid var(--vert-nuit); border-radius:6px; cursor:crosshair; display:block;"></canvas>
+          <div style="display:flex; gap:18px; margin-top:8px; font-family:var(--police-util); font-size:.85rem; color:var(--vert-nuit);">
+            <span>Temps : <strong id="mil-jeu-temps">60</strong>s</span>
+            <span>Tués : <strong id="mil-jeu-kills">0</strong></span>
+            <span>Vie : <strong id="mil-jeu-vie">100</strong></span>
+          </div>
+          <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer; margin-top:8px;" id="mil-jeu-arreter">Terminer la mission</button>
+        </div>
+        <div id="mil-resultat"></div>
+      </div>
+      <div class="pc-carte">
+        <h3>Mes missions</h3>
+        <div id="mil-mes-missions"><p class="pm-mini">Chargement…</p></div>
+      </div>
+    </div>`;
+}
+
+const MIL_NOMS_GRADE = { recrue: 'Recrue militaire', militaire: 'Militaire', officier: 'Officier' };
+let milMissionActive = null; // { id, ... } retourné par militaire_demarrer_mission()
+
+async function initialiserPanneauMilitaire() {
+  const { data: statut } = await rpcSafe('mon_statut_militaire', {}, null);
+  const zone = document.getElementById('mil-statut');
+  if (!statut || !statut.grade_militaire) {
+    zone.innerHTML = '<p class="pm-mini">Vous n\'occupez aucun poste militaire. Seul le gouvernement peut enrôler.</p>';
+    document.getElementById('mil-demarrer').disabled = true;
+  } else {
+    zone.innerHTML = `
+      <p class="pm-mini">Grade : <strong>${escHtml(MIL_NOMS_GRADE[statut.grade_militaire] || statut.grade_militaire)}</strong></p>
+      <p class="pm-mini">Taux actuel : ${fmtR(statut.taux_par_kill)} R$ / zombie tué (plafond 50 tués payés par mission)</p>`;
+    document.getElementById('mil-demarrer').disabled = false;
+  }
+
+  const promoZone = document.getElementById('mil-promotion');
+  if (statut && statut.grade_militaire === 'officier') {
+    promoZone.innerHTML = `
+      <h4 style="margin-top:12px;">Promouvoir une Recrue militaire</h4>
+      <div class="pc-champ"><label>Nom d'utilisateur</label><input type="text" id="mil-promo-username"></div>
+      <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="mil-promo-appliquer">Promouvoir au grade de Militaire</button>
+      <div id="mil-promo-message"></div>`;
+    document.getElementById('mil-promo-appliquer').onclick = async () => {
+      const { error } = await sb.rpc('militaire_promouvoir', { p_username: document.getElementById('mil-promo-username').value });
+      entMsg('mil-promo-message', error, 'Promu au grade de Militaire.');
+    };
+  } else {
+    promoZone.innerHTML = '';
+  }
+
+  document.getElementById('mil-demarrer').onclick = milDemarrerMission;
+  milChargerMesMissions();
+}
+
+async function milChargerMesMissions() {
+  const { data } = await rpcSafe('mes_missions_militaires', {}, []);
+  const zone = document.getElementById('mil-mes-missions');
+  zone.innerHTML = (data || []).length ? data.map(m => `
+    <div class="pm-fleet-item"><div class="entete"><strong>${new Date(m.debut_le).toLocaleString('fr-FR')}</strong> — <em>${m.statut === 'payee' ? 'payée' : 'en cours'}</em></div>
+      <p class="pm-mini">${m.statut === 'payee' ? `${m.kills} tué(s) — ${fmtR(m.montant)} R$` : 'Mission en cours ou interrompue.'}</p>
+    </div>`).join('') : '<p class="pm-mini">Aucune mission.</p>';
+}
+
+async function milDemarrerMission() {
+  const msg = document.getElementById('mil-mission-message');
+  msg.innerHTML = '';
+  const { data, error } = await sb.rpc('militaire_demarrer_mission');
+  if (error) { msg.innerHTML = `<p class="pc-erreur">${escHtml(error.message)}</p>`; return; }
+  milMissionActive = data;
+  document.getElementById('mil-resultat').innerHTML = '';
+  document.getElementById('mil-jeu-conteneur').style.display = '';
+  document.getElementById('mil-demarrer').disabled = true;
+  milLancerJeu();
+}
+
+/* ---- Minijeu de tir 2D (vagues de zombies) ---- */
+function milLancerJeu() {
+  const canvas = document.getElementById('mil-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const joueur = { x: W / 2, y: H / 2, r: 12, vie: 100, vitesse: 3 };
+  const touches = {};
+  let sourisX = W / 2, sourisY = H / 2, viser = false;
+  let balles = [];
+  let zombies = [];
+  let kills = 0;
+  let tempsRestant = 60;
+  let termine = false;
+  let dernierSpawn = 0;
+  let rafId = null;
+
+  function spawnZombie() {
+    const cote = Math.floor(Math.random() * 4);
+    let x, y;
+    if (cote === 0) { x = -20; y = Math.random() * H; }
+    else if (cote === 1) { x = W + 20; y = Math.random() * H; }
+    else if (cote === 2) { x = Math.random() * W; y = -20; }
+    else { x = Math.random() * W; y = H + 20; }
+    const vitesse = 0.6 + Math.random() * 0.8 + Math.max(0, (60 - tempsRestant) / 60);
+    zombies.push({ x, y, r: 11, vitesse, vie: 20 });
+  }
+
+  function onKeyDown(e) { touches[e.key.toLowerCase()] = true; }
+  function onKeyUp(e) { touches[e.key.toLowerCase()] = false; }
+  function onMouseMove(e) {
+    const rect = canvas.getBoundingClientRect();
+    sourisX = (e.clientX - rect.left) * (W / rect.width);
+    sourisY = (e.clientY - rect.top) * (H / rect.height);
+  }
+  function onMouseDown() { viser = true; }
+  function onMouseUp() { viser = false; }
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mousedown', onMouseDown);
+  canvas.addEventListener('mouseup', onMouseUp);
+
+  let dernierTir = 0;
+  let debutMs = performance.now();
+  let dernierTick = debutMs;
+
+  function nettoyer() {
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
+    canvas.removeEventListener('mousemove', onMouseMove);
+    canvas.removeEventListener('mousedown', onMouseDown);
+    canvas.removeEventListener('mouseup', onMouseUp);
+    if (rafId) cancelAnimationFrame(rafId);
+  }
+
+  async function terminerMission(raison) {
+    if (termine) return;
+    termine = true;
+    nettoyer();
+    document.getElementById('mil-jeu-conteneur').style.display = 'none';
+    document.getElementById('mil-demarrer').disabled = false;
+    const resZone = document.getElementById('mil-resultat');
+    resZone.innerHTML = '<p class="pm-mini">Transmission du rapport de mission…</p>';
+    const missionId = milMissionActive ? milMissionActive.id : null;
+    milMissionActive = null;
+    if (!missionId) { resZone.innerHTML = '<p class="pc-erreur">Mission introuvable.</p>'; return; }
+    const { data, error } = await sb.rpc('militaire_terminer_mission', { p_mission_id: missionId, p_kills: kills });
+    if (error) { resZone.innerHTML = `<p class="pc-erreur">${escHtml(error.message)}</p>`; return; }
+    resZone.innerHTML = `<p class="pc-succes">Mission terminée (${raison}) — ${data.kills} zombie(s) tué(s), ${data.kills_payes} payé(s) — ${fmtR(data.montant)} R$ versés.</p>`;
+    milChargerMesMissions();
+  }
+
+  document.getElementById('mil-jeu-arreter').onclick = () => terminerMission('arrêtée manuellement');
+
+  function boucle(maintenant) {
+    if (termine) return;
+    const dtMs = maintenant - dernierTick;
+    dernierTick = maintenant;
+    const dt = Math.min(50, dtMs) / 16.67;
+
+    tempsRestant = Math.max(0, 60 - (maintenant - debutMs) / 1000);
+    document.getElementById('mil-jeu-temps').textContent = Math.ceil(tempsRestant);
+
+    if (tempsRestant <= 0) { terminerMission('temps écoulé'); return; }
+    if (joueur.vie <= 0) { terminerMission('hors de combat'); return; }
+
+    // Déplacement joueur
+    let dx = 0, dy = 0;
+    if (touches['arrowup'] || touches['w']) dy -= 1;
+    if (touches['arrowdown'] || touches['s']) dy += 1;
+    if (touches['arrowleft'] || touches['a']) dx -= 1;
+    if (touches['arrowright'] || touches['d']) dx += 1;
+    const norme = Math.hypot(dx, dy) || 1;
+    joueur.x = Math.max(joueur.r, Math.min(W - joueur.r, joueur.x + (dx / norme) * joueur.vitesse * dt));
+    joueur.y = Math.max(joueur.r, Math.min(H - joueur.r, joueur.y + (dy / norme) * joueur.vitesse * dt));
+
+    // Tir
+    if (viser && maintenant - dernierTir > 160) {
+      dernierTir = maintenant;
+      const angle = Math.atan2(sourisY - joueur.y, sourisX - joueur.x);
+      balles.push({ x: joueur.x, y: joueur.y, vx: Math.cos(angle) * 9, vy: Math.sin(angle) * 9, vie: 60 });
+    }
+
+    // Spawn de zombies (vagues progressives)
+    if (maintenant - dernierSpawn > Math.max(350, 1100 - (60 - tempsRestant) * 12)) {
+      dernierSpawn = maintenant;
+      spawnZombie();
+    }
+
+    // Mise à jour balles
+    balles.forEach(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.vie -= dt; });
+    balles = balles.filter(b => b.vie > 0 && b.x > -10 && b.x < W + 10 && b.y > -10 && b.y < H + 10);
+
+    // Mise à jour zombies (poursuivent le joueur)
+    zombies.forEach(z => {
+      const angle = Math.atan2(joueur.y - z.y, joueur.x - z.x);
+      z.x += Math.cos(angle) * z.vitesse * dt;
+      z.y += Math.sin(angle) * z.vitesse * dt;
+      if (Math.hypot(joueur.x - z.x, joueur.y - z.y) < joueur.r + z.r) {
+        joueur.vie = Math.max(0, joueur.vie - 0.35 * dt);
+      }
+    });
+
+    // Collisions balles/zombies
+    const ballesTouchees = new Set();
+    zombies.forEach(z => {
+      for (let i = 0; i < balles.length; i++) {
+        if (ballesTouchees.has(i)) continue;
+        const b = balles[i];
+        if (Math.hypot(b.x - z.x, b.y - z.y) < z.r + 3) {
+          z.vie -= 20;
+          ballesTouchees.add(i);
+          break;
+        }
+      }
+    });
+    if (ballesTouchees.size) balles = balles.filter((_, i) => !ballesTouchees.has(i));
+    const avant = zombies.length;
+    zombies = zombies.filter(z => z.vie > 0);
+    kills += avant - zombies.length;
+
+    document.getElementById('mil-jeu-kills').textContent = kills;
+    document.getElementById('mil-jeu-vie').textContent = Math.ceil(joueur.vie);
+
+    // Rendu
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0b1a0f';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(201,168,106,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(sourisX - 8, sourisY); ctx.lineTo(sourisX + 8, sourisY);
+    ctx.moveTo(sourisX, sourisY - 8); ctx.lineTo(sourisX, sourisY + 8); ctx.stroke();
+
+    ctx.fillStyle = '#c9a86a';
+    balles.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill(); });
+
+    ctx.fillStyle = '#6fae4f';
+    zombies.forEach(z => {
+      ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.fill();
+    });
+
+    ctx.fillStyle = '#e3d9c0';
+    ctx.beginPath(); ctx.arc(joueur.x, joueur.y, joueur.r, 0, Math.PI * 2); ctx.fill();
+
+    rafId = requestAnimationFrame(boucle);
+  }
+
+  rafId = requestAnimationFrame(boucle);
 }
 
 demarrer();
