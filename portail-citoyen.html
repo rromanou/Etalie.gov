@@ -993,6 +993,10 @@ async function chargerTableauDeBord(utilisateur) {
   // num_CAS.txt n'est plus suffisant (voir patch 24).
   const { data: monPostePoliceInit } = await rpcSafe('mon_poste_police', {}, null);
   const accesAgentReel = Boolean(citoyen.est_admin || monPostePoliceInit);
+  // Idem pour l'onglet Militaire : visible seulement si un grade militaire
+  // est réellement assigné (ou admin) — pas un onglet public.
+  const { data: monStatutMilitaireInit } = await rpcSafe('mon_statut_militaire', {}, null);
+  const accesMilitaireReel = Boolean(citoyen.est_admin || (monStatutMilitaireInit && monStatutMilitaireInit.grade_militaire));
 
   const { data: parametresFiscaux } = await sb.from('parametres_fiscaux').select('taux_preventif').eq('id', 1).single();
   const tauxPreventifActuel = parametresFiscaux ? Number(parametresFiscaux.taux_preventif) : 0;
@@ -1051,7 +1055,7 @@ async function chargerTableauDeBord(utilisateur) {
       <button data-onglet="autochtone">Famille autochtone</button>
       <button data-onglet="bureau-poste">Bureau de poste</button>
       <button data-onglet="police">Commissariat</button>
-      <button data-onglet="militaire">Militaire</button>
+      ${accesMilitaireReel ? '<button data-onglet="militaire">Militaire</button>' : ''}
       ${banquesAccessibles.length ? '<button data-onglet="presse">Presse monétaire</button>' : ''}
       ${accesAgentReel ? '<button data-onglet="agent">Agent de la paix</button>' : ''}
       ${citoyen.est_admin ? '<button data-onglet="admin">Administration</button>' : ''}
@@ -1344,7 +1348,7 @@ async function chargerTableauDeBord(utilisateur) {
     ${panneauAutochtoneHTML()}
     ${panneauBureauPosteHTML()}
     ${panneauPoliceHTML()}
-    ${panneauMilitaireHTML()}
+    ${accesMilitaireReel ? panneauMilitaireHTML() : ''}
     ${banquesAccessibles.length ? panneauPresseHTML() : ''}
     ${accesAgentReel ? panneauAgentHTML() : ''}
     ${citoyen.est_admin ? panneauAdminHTML() : ''}
@@ -1407,7 +1411,7 @@ async function chargerTableauDeBord(utilisateur) {
   initialiserPanneauAutochtone();
   initialiserPanneauBureauPoste();
   initialiserPanneauPolice();
-  initialiserPanneauMilitaire();
+  if (accesMilitaireReel) initialiserPanneauMilitaire();
   synchroniserCIBEtRapports();
 
   demarrerTicker(utilisateur.id, citoyen);
