@@ -128,7 +128,9 @@ begin
   perform _embaucher_policier(v_row.id, v_directeur, 15, 3);
   return v_row;
 end; $$;
-grant execute on function gouv_creer_comisseriat(text, text, text) to authenticated;
+
+grant execute on function gouv_creer_comisseriat(text, text, text, text) to authenticated;
+
 
 create or replace function _embaucher_policier(p_comisseriat_id uuid, p_citoyen_id uuid, p_grade int default 1, p_sous_grade int default 1)
 returns comisseriats_membres language plpgsql security definer set search_path = public as $$
