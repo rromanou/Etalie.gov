@@ -1251,7 +1251,10 @@ async function chargerTableauDeBord(utilisateur) {
             <option value="bateau">Permis de navigation de plaisance — 149,99 R$ + taxes (10 % TAN + 5 % Taxe Digitale), renouvelable chaque année - il est obligatoire pour pouvoir conduire un bateau dans les lacs des provinces qui l'acceptent; sans permis ils peuvent conduire les bateaux suivants: kayak, paddle. Mais s'il est accompagné d'un permis de conduite de bateau alors il peut conduire tout-type de bateau (sans les bateaux commerciaux).</option>
           </select>
         </div>
-        <div class="pc-champ"><label for="permis-adresse">Adresse de livraison du permis</label><input type="text" id="permis-adresse" placeholder="Numéro, rue, municipalité, province"></div>
+        <div class="pc-champ"><label>Moyen de paiement</label><select id="permis-moyen"><option value="carte">Carte</option><option value="cib">CIB d'envoi (entreprise)</option></select></div>
+        <div id="permis-moyen-carte"><div class="pc-champ"><label>Numéro de carte (12 chiffres)</label><input type="text" maxlength="12" id="permis-carte-numero"></div>
+          <div class="pc-champ"><label>NIP</label><input type="text" maxlength="6" id="permis-carte-nip"></div></div>
+        <div id="permis-moyen-cib" style="display:none;"><div class="pc-champ"><label>CIB d'envoi</label><input type="text" id="permis-cib"></div></div>
         <div id="permis-message"></div>
         <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="permis-acheter">Acheter ce permis</button>
       </div>
@@ -1820,22 +1823,23 @@ async function chargerVirementsConsiderablesRecus(citoyen) {
    PERMIS
    ===================================================================== */
 function initialiserOngletPermis(citoyen) {
+  document.getElementById('permis-moyen').onchange = (e) => {
+    document.getElementById('permis-moyen-carte').style.display = e.target.value === 'carte' ? '' : 'none';
+    document.getElementById('permis-moyen-cib').style.display = e.target.value === 'cib' ? '' : 'none';
+  };
   document.getElementById('permis-acheter').onclick = async () => {
     const type = document.getElementById('permis-type').value;
-    const adresse = document.getElementById('permis-adresse').value.trim();
+    const moyen = document.getElementById('permis-moyen').value;
     const msg = document.getElementById('permis-message');
-    if (!adresse) { msg.innerHTML = '<p class="pc-erreur">Une adresse de livraison est requise.</p>'; return; }
-    const moyen = confirm('Payer par carte ? (OK = carte, Annuler = CIB d\'envoi d\'entreprise)') ? 'carte' : 'cib';
-    const params = { p_type: type, p_adresse_livraison: adresse, p_moyen: moyen };
-    if (moyen === 'carte') {
-      params.p_carte_numero = prompt('Numéro de carte (12 chiffres) :'); if (!params.p_carte_numero) return;
-      params.p_carte_nip = prompt('NIP :'); if (!params.p_carte_nip) return;
-    } else {
-      params.p_cib = prompt('CIB d\'envoi :'); if (!params.p_cib) return;
-    }
+    const params = {
+      p_type: type, p_moyen: moyen,
+      p_carte_numero: moyen === 'carte' ? document.getElementById('permis-carte-numero').value : null,
+      p_carte_nip: moyen === 'carte' ? document.getElementById('permis-carte-nip').value : null,
+      p_cib: moyen === 'cib' ? document.getElementById('permis-cib').value : null
+    };
     const { error } = await sb.rpc('acheter_permis', params);
-    msg.innerHTML = error ? `<p class="pc-erreur">${error.message}</p>` : '<p class="pc-succes">Permis acheté, en cours de livraison à l\'adresse fournie.</p>';
-    if (!error) { document.getElementById('permis-adresse').value = ''; chargerPermis(citoyen); }
+    msg.innerHTML = error ? `<p class="pc-erreur">${error.message}</p>` : '<p class="pc-succes">Permis acheté.</p>';
+    if (!error) chargerPermis(citoyen);
   };
 }
 
@@ -2055,22 +2059,32 @@ async function chargerConstats(citoyen) {
         ${!c.paye && !c.annule && !(k && k.statut === 'en_attente') ? `<button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="contester-constat-${c.id}">Contester</button>` : ''}
         ${c.paye ? `<button class="danger" id="retirer-constat-${c.id}">Retirer de ma liste</button>` : ''}
       </div>
+      ${!c.paye && !c.annule && !(k && k.statut === 'en_attente') ? `
+      <div class="pc-champ"><label>Moyen de paiement</label><select id="constat-moyen-${c.id}"><option value="carte">Carte</option><option value="cib">CIB d'envoi (entreprise)</option></select></div>
+      <div id="constat-moyen-carte-${c.id}"><div class="pc-champ"><label>Numéro de carte</label><input type="text" maxlength="12" id="constat-carte-numero-${c.id}"></div>
+        <div class="pc-champ"><label>NIP</label><input type="text" maxlength="6" id="constat-carte-nip-${c.id}"></div></div>
+      <div id="constat-moyen-cib-${c.id}" style="display:none;"><div class="pc-champ"><label>CIB d'envoi</label><input type="text" id="constat-cib-${c.id}"></div></div>
+      ` : ''}
       <div id="contester-zone-${c.id}"></div>
     </div>
   `;
   }).join('');
 
   data.forEach(c => {
+    const selMoyen = document.getElementById('constat-moyen-' + c.id);
+    if (selMoyen) selMoyen.onchange = (e) => {
+      document.getElementById('constat-moyen-carte-' + c.id).style.display = e.target.value === 'carte' ? '' : 'none';
+      document.getElementById('constat-moyen-cib-' + c.id).style.display = e.target.value === 'cib' ? '' : 'none';
+    };
     const btnPayer = document.getElementById('payer-constat-' + c.id);
     if (btnPayer) btnPayer.onclick = async () => {
-      const moyen = confirm('Payer par carte ? (OK = carte, Annuler = CIB d\'envoi d\'entreprise)') ? 'carte' : 'cib';
-      const params = { p_id: c.id, p_moyen: moyen };
-      if (moyen === 'carte') {
-        params.p_carte_numero = prompt('Numéro de carte (12 chiffres) :'); if (!params.p_carte_numero) return;
-        params.p_carte_nip = prompt('NIP :'); if (!params.p_carte_nip) return;
-      } else {
-        params.p_cib = prompt('CIB d\'envoi :'); if (!params.p_cib) return;
-      }
+      const moyen = document.getElementById('constat-moyen-' + c.id).value;
+      const params = {
+        p_id: c.id, p_moyen: moyen,
+        p_carte_numero: moyen === 'carte' ? document.getElementById('constat-carte-numero-' + c.id).value : null,
+        p_carte_nip: moyen === 'carte' ? document.getElementById('constat-carte-nip-' + c.id).value : null,
+        p_cib: moyen === 'cib' ? document.getElementById('constat-cib-' + c.id).value : null
+      };
       const { error } = await sb.rpc('payer_constat', params);
       if (error) alert(error.message); else chargerConstats(citoyen);
     };
