@@ -6484,6 +6484,27 @@ function panneauBanquesHTML() {
         <div id="bq-mes-comptes"><p class="pm-mini">Chargement…</p></div>
       </div>
       <div class="pc-carte">
+        <h3>Mes cartes de paiement</h3>
+        <p class="pm-mini">Réservé aux membres d'une banque publique. La carte à trésorerie dépense votre trésorerie ; la carte à emprunt emprunte jusqu'au plafond fixé par la banque (intérêts sur le prix net seulement, jamais sur les taxes).</p>
+        <div class="pc-champ"><label>Banque publique</label><select id="cb-demander-banque"></select></div>
+        <div class="pc-champ"><label>Type</label><select id="cb-demander-type"><option value="tresorerie">Trésorerie</option><option value="emprunt">Emprunt</option></select></div>
+        <div class="pc-champ"><label>NIP à 6 chiffres (choisi par vous)</label><input type="text" maxlength="6" id="cb-demander-nip"></div>
+        <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="cb-demander">Demander la carte</button>
+        <div id="cb-demander-message"></div>
+
+        <h5 style="margin-top:12px;">Associer une carte existante (pas nécessairement la vôtre)</h5>
+        <div class="pc-champ"><label>Numéro (12 chiffres)</label><input type="text" maxlength="12" id="cb-assoc-numero"></div>
+        <div class="pc-champ"><label>NIP</label><input type="text" maxlength="6" id="cb-assoc-nip"></div>
+        <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="cb-associer">Associer</button>
+        <div id="cb-associer-message"></div>
+
+        <h5 style="margin-top:12px;">Mes cartes</h5>
+        <div id="cb-mes-cartes"><p class="pm-mini">Chargement…</p></div>
+
+        <h5 style="margin-top:12px;">Demandes de changement de conditions reçues</h5>
+        <div id="cb-demandes-changement"><p class="pm-mini">Chargement…</p></div>
+      </div>
+      <div class="pc-carte">
         <h3>Toutes les banques</h3>
         <div id="bq-toutes-banques"><p class="pm-mini">Chargement…</p></div>
         <div id="bq-detail"></div>
@@ -6498,6 +6519,68 @@ async function initialiserPanneauBanques() {
     if (!error) bqChargerTout();
   };
   bqChargerTout();
+
+  rpcSafe('liste_banques_publiques', {}, []).then(({ data }) => {
+    const sel = document.getElementById('cb-demander-banque');
+    if (sel) sel.innerHTML = (data || []).map(b => `<option value="${b.id}">${escHtml(b.nom)}</option>`).join('') || '<option value="">Aucune banque publique</option>';
+  });
+  document.getElementById('cb-demander').onclick = async () => {
+    const { error } = await sb.rpc('citoyen_demander_carte', {
+      p_banque_id: document.getElementById('cb-demander-banque').value, p_type: document.getElementById('cb-demander-type').value,
+      p_nip: document.getElementById('cb-demander-nip').value
+    });
+    entMsg('cb-demander-message', error, 'Carte émise.');
+    if (!error) cbChargerMesCartes();
+  };
+  document.getElementById('cb-associer').onclick = async () => {
+    const { error } = await sb.rpc('citoyen_associer_carte', { p_numero: document.getElementById('cb-assoc-numero').value, p_nip: document.getElementById('cb-assoc-nip').value });
+    entMsg('cb-associer-message', error, 'Carte associée.');
+    if (!error) cbChargerMesCartes();
+  };
+  cbChargerMesCartes();
+  cbChargerDemandesChangement();
+}
+
+const CB_NOMS_TYPE = { tresorerie: 'Trésorerie', emprunt: 'Emprunt' };
+
+async function cbChargerMesCartes() {
+  const { data } = await rpcSafe('mes_cartes', {}, []);
+  const zone = document.getElementById('cb-mes-cartes');
+  zone.innerHTML = (data || []).length ? data.map(c => `
+    <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(c.numero)}</strong> — ${CB_NOMS_TYPE[c.type] || c.type} — ${escHtml(c.banque)}${c.proprietaire ? '' : ' (associée)'}</div>
+      <p class="pm-mini">Statut : ${c.statut} — expire le ${c.date_expiration}${c.type === 'emprunt' ? ` — dette : ${fmtR(c.dette_actuelle)} / ${fmtR(c.montant_max)} R$` : ''}</p>
+      <div class="pm-ligne-boutons">
+        ${c.proprietaire && c.statut !== 'active' ? `<button class="pc-lien" data-cb-renouveler="${c.id}">Renouveler</button>` : ''}
+        ${!c.proprietaire ? `<button class="pc-lien" data-cb-dissocier="${c.id}">Dissocier</button>` : ''}
+      </div></div>`).join('') : '<p class="pm-mini">Aucune carte.</p>';
+  zone.querySelectorAll('[data-cb-renouveler]').forEach(b => b.onclick = async () => {
+    const { error } = await sb.rpc('citoyen_renouveler_carte', { p_carte_id: b.dataset.cbRenouveler });
+    if (error) alert(error.message); else cbChargerMesCartes();
+  });
+  zone.querySelectorAll('[data-cb-dissocier]').forEach(b => b.onclick = async () => {
+    const { error } = await sb.rpc('citoyen_dissocier_carte', { p_carte_id: b.dataset.cbDissocier });
+    if (error) alert(error.message); else cbChargerMesCartes();
+  });
+}
+
+async function cbChargerDemandesChangement() {
+  const { data } = await rpcSafe('mes_demandes_changement_carte_recues', {}, []);
+  const zone = document.getElementById('cb-demandes-changement');
+  zone.innerHTML = (data || []).length ? data.map(d => `
+    <div class="pm-fleet-item"><div class="entete"><strong>Carte ${escHtml(d.carte_numero)}</strong></div>
+      <p class="pm-mini">${d.taux_interet != null ? `Nouveau taux fixe : ${d.taux_interet}%` : ''}${d.taux_periodique != null ? `Nouveau taux graduel : ${d.taux_periodique}%/${d.periode_taux}` : ''}${d.montant_max != null ? ` — nouveau plafond : ${fmtR(d.montant_max)} R$` : ''}</p>
+      <div class="pm-ligne-boutons">
+        <button class="pc-lien" data-cb-chg-accepter="${d.id}">Accepter</button>
+        <button class="pc-lien" data-cb-chg-refuser="${d.id}">Refuser</button>
+      </div></div>`).join('') : '<p class="pm-mini">Aucune.</p>';
+  zone.querySelectorAll('[data-cb-chg-accepter]').forEach(b => b.onclick = async () => {
+    const { error } = await sb.rpc('citoyen_traiter_changement_carte', { p_id: b.dataset.cbChgAccepter, p_decision: 'acceptee' });
+    if (error) alert(error.message); else { cbChargerMesCartes(); cbChargerDemandesChangement(); }
+  });
+  zone.querySelectorAll('[data-cb-chg-refuser]').forEach(b => b.onclick = async () => {
+    const { error } = await sb.rpc('citoyen_traiter_changement_carte', { p_id: b.dataset.cbChgRefuser, p_decision: 'refusee' });
+    if (error) alert(error.message); else cbChargerDemandesChangement();
+  });
 }
 
 let bqBanquesCache = {};
@@ -6592,6 +6675,11 @@ async function bqOuvrirDetail(banqueId) {
       <div class="pc-champ" style="margin-top:8px;"><label>Mot de passe (pour dissoudre)</label><input type="password" id="bq-dissoudre-mdp"></div>
       <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-dissoudre">Dissoudre la banque</button>
 
+      ${banque.publique ? `
+      <h5 style="margin-top:12px;">Cartes de paiement proposées (propriétaire seulement)</h5>
+      <div id="bq-cartes-config"><p class="pm-mini">Chargement…</p></div>
+      ` : ''}
+
       ${(adhesions || []).length ? `<h5 style="margin-top:12px;">Demandes d'adhésion</h5>
         ${adhesions.map(a => `<p class="pm-mini">@${escHtml(a.username)} — ${escHtml(a.motif)}
           <button class="pc-lien" data-bq-adh-accepter="${a.id}">Accepter</button>
@@ -6631,6 +6719,7 @@ async function bqOuvrirDetail(banqueId) {
     const { error } = await sb.rpc('banque_declarer_publique', { p_banque_id: banqueId });
     if (error) alert(error.message); else { alert('Banque déclarée publique.'); bqChargerTout(); }
   };
+  if (banque.publique) bqRenduCartesConfig(banqueId);
   document.getElementById('bq-dissoudre').onclick = async () => {
     if (!confirm('Dissoudre définitivement cette banque ?')) return;
     const { error } = await sb.rpc('banque_dissoudre', { p_banque_id: banqueId, p_mdp: document.getElementById('bq-dissoudre-mdp').value });
@@ -6643,6 +6732,75 @@ async function bqOuvrirDetail(banqueId) {
   zone.querySelectorAll('[data-bq-adh-refuser]').forEach(b => b.onclick = async () => {
     const { error } = await sb.rpc('banque_traiter_adhesion', { p_id: b.dataset.bqAdhRefuser, p_decision: 'refusee' });
     if (error) alert(error.message); else bqOuvrirDetail(banqueId);
+  });
+}
+
+async function bqRenduCartesConfig(banqueId) {
+  const zone = document.getElementById('bq-cartes-config');
+  if (!zone) return;
+  const { data } = await rpcSafe('banque_cartes_config', { p_banque_id: banqueId }, []);
+  const parType = {}; (data || []).forEach(c => { parType[c.type] = c; });
+  const champ = (type, cle, val, step) => `<input type="number" ${step ? `step="${step}"` : ''} min="0" data-bq-cc="${type}:${cle}" value="${val != null ? val : ''}" style="width:110px;">`;
+  zone.innerHTML = `
+    <div class="pm-fleet-item"><div class="entete"><strong>Carte à trésorerie</strong></div>
+      <p class="pm-mini">Expiration (jours) ${champ('tresorerie','jours_expiration', parType.tresorerie?.jours_expiration ?? 365)}
+        Prix 1re fois ${champ('tresorerie','prix_premiere', parType.tresorerie?.prix_premiere ?? 0, '0.01')}
+        Prix renouvellement ${champ('tresorerie','prix_renouvellement', parType.tresorerie?.prix_renouvellement ?? 0, '0.01')}
+        Âge minimum ${champ('tresorerie','age_minimum', parType.tresorerie?.age_minimum ?? 0, '0.01')}</p>
+      <label style="font-size:.82rem;"><input type="checkbox" data-bq-cc="tresorerie:achat_autorise" ${parType.tresorerie?.achat_autorise !== false ? 'checked' : ''}> Achat autorisé</label>
+      <button class="pc-lien" data-bq-cc-sauver="tresorerie">Enregistrer</button></div>
+    <div class="pm-fleet-item"><div class="entete"><strong>Carte à emprunt</strong></div>
+      <p class="pm-mini">Expiration (jours) ${champ('emprunt','jours_expiration', parType.emprunt?.jours_expiration ?? 365)}
+        Prix 1re fois ${champ('emprunt','prix_premiere', parType.emprunt?.prix_premiere ?? 0, '0.01')}
+        Prix renouvellement ${champ('emprunt','prix_renouvellement', parType.emprunt?.prix_renouvellement ?? 0, '0.01')}
+        Âge minimum ${champ('emprunt','age_minimum', parType.emprunt?.age_minimum ?? 0, '0.01')}</p>
+      <p class="pm-mini">Taux fixe % par dépense ${champ('emprunt','taux_interet', parType.emprunt?.taux_interet, '0.01')}
+        — OU — taux graduel % ${champ('emprunt','taux_periodique', parType.emprunt?.taux_periodique, '0.01')}
+        par <select data-bq-cc="emprunt:periode_taux"><option value="jour" ${parType.emprunt?.periode_taux==='jour'?'selected':''}>jour</option><option value="semaine" ${parType.emprunt?.periode_taux==='semaine'?'selected':''}>semaine</option><option value="mois" ${(!parType.emprunt?.periode_taux || parType.emprunt?.periode_taux==='mois')?'selected':''}>mois</option></select>
+        — Plafond d'emprunt ${champ('emprunt','montant_max', parType.emprunt?.montant_max ?? 0, '0.01')}</p>
+      <label style="font-size:.82rem;"><input type="checkbox" data-bq-cc="emprunt:achat_autorise" ${parType.emprunt?.achat_autorise !== false ? 'checked' : ''}> Achat autorisé</label>
+      <button class="pc-lien" data-bq-cc-sauver="emprunt">Enregistrer</button></div>
+    <div id="bq-cartes-config-message"></div>
+
+    <h5 style="margin-top:12px;">Proposer un changement de conditions à une carte emprunt existante</h5>
+    <p class="pm-mini">La carte reste inchangée tant que son titulaire n'a pas approuvé.</p>
+    <div class="pc-champ"><label>ID de la carte</label><input type="text" id="bq-cc-chg-carte"></div>
+    <div class="pc-champ"><label>Nouveau taux fixe %</label><input type="number" step="0.01" id="bq-cc-chg-taux"></div>
+    <div class="pc-champ"><label>— OU — nouveau taux graduel %</label><input type="number" step="0.01" id="bq-cc-chg-periodique"></div>
+    <div class="pc-champ"><label>Période</label><select id="bq-cc-chg-periode"><option value="jour">jour</option><option value="semaine">semaine</option><option value="mois">mois</option></select></div>
+    <div class="pc-champ"><label>Nouveau plafond</label><input type="number" step="0.01" id="bq-cc-chg-max"></div>
+    <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-cc-chg-proposer">Proposer</button>
+    <div id="bq-cc-chg-message"></div>`;
+
+  const elChgProposer = zone.querySelector('#bq-cc-chg-proposer');
+  if (elChgProposer) elChgProposer.onclick = async () => {
+    const taux = document.getElementById('bq-cc-chg-taux').value;
+    const periodique = document.getElementById('bq-cc-chg-periodique').value;
+    const max = document.getElementById('bq-cc-chg-max').value;
+    const { error } = await sb.rpc('banque_proposer_changement_carte', {
+      p_carte_id: document.getElementById('bq-cc-chg-carte').value,
+      p_taux_interet: taux !== '' ? Number(taux) : null, p_taux_periodique: periodique !== '' ? Number(periodique) : null,
+      p_periode_taux: periodique !== '' ? document.getElementById('bq-cc-chg-periode').value : null,
+      p_montant_max: max !== '' ? Number(max) : null
+    });
+    entMsg('bq-cc-chg-message', error, 'Changement proposé — en attente d\'approbation du titulaire.');
+  };
+
+  zone.querySelectorAll('[data-bq-cc-sauver]').forEach(b => b.onclick = async () => {
+    const type = b.dataset.bqCcSauver;
+    const v = (cle) => zone.querySelector(`[data-bq-cc="${type}:${cle}"]`);
+    const taux_interet = v('taux_interet') && v('taux_interet').value !== '' ? Number(v('taux_interet').value) : null;
+    const taux_periodique = v('taux_periodique') && v('taux_periodique').value !== '' ? Number(v('taux_periodique').value) : null;
+    const { error } = await sb.rpc('banque_configurer_carte', {
+      p_banque_id: banqueId, p_type: type,
+      p_jours_expiration: Number(v('jours_expiration').value), p_prix_premiere: Number(v('prix_premiere').value),
+      p_prix_renouvellement: Number(v('prix_renouvellement').value), p_age_minimum: Number(v('age_minimum').value),
+      p_achat_autorise: v('achat_autorise').checked,
+      p_taux_interet: type === 'emprunt' ? taux_interet : null, p_taux_periodique: type === 'emprunt' ? taux_periodique : null,
+      p_periode_taux: type === 'emprunt' ? v('periode_taux').value : null, p_montant_max: type === 'emprunt' ? Number(v('montant_max').value) : null
+    });
+    entMsg('bq-cartes-config-message', error, 'Configuration enregistrée.');
+    if (!error) bqRenduCartesConfig(banqueId);
   });
 }
 
@@ -6818,11 +6976,26 @@ async function mpOuvrirFiche(annonceId) {
       <p style="font-family:var(--police-titre); font-size:1.3rem; color:var(--vert-nuit);">${fmtR(a.prix_unitaire)} R$ / unité — ${a.quantite_disponible} disponible(s)</p>
       <div class="pc-champ"><label>Quantité</label><input type="number" min="1" max="${a.quantite_disponible}" value="1" id="mp-achat-qte"></div>
       <div class="pc-champ"><label>Mode de paiement</label><select id="mp-achat-mode"><option value="comptant">Comptant</option>${a.albatros ? `<option value="albatros">Programme Albatros (étalé sur ${a.albatros_mois} mois)</option>` : ''}</select></div>
+      <div class="pc-champ"><label>Moyen de paiement</label><select id="mp-achat-moyen"><option value="carte">Carte</option><option value="cib">CIB d'envoi (entreprise)</option></select></div>
+      <div id="mp-achat-moyen-carte"><div class="pc-champ"><label>Numéro de carte (12 chiffres)</label><input type="text" maxlength="12" id="mp-achat-carte-numero"></div>
+        <div class="pc-champ"><label>NIP</label><input type="text" maxlength="6" id="mp-achat-carte-nip"></div></div>
+      <div id="mp-achat-moyen-cib" style="display:none;"><div class="pc-champ"><label>CIB d'envoi</label><input type="text" id="mp-achat-cib"></div></div>
       <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="mp-achat-confirmer">Acheter</button>
       <div id="mp-achat-message"></div>
     </div>`;
+  document.getElementById('mp-achat-moyen').onchange = (e) => {
+    document.getElementById('mp-achat-moyen-carte').style.display = e.target.value === 'carte' ? '' : 'none';
+    document.getElementById('mp-achat-moyen-cib').style.display = e.target.value === 'cib' ? '' : 'none';
+  };
   document.getElementById('mp-achat-confirmer').onclick = async () => {
-    const { error: err } = await sb.rpc('marche_acheter', { p_annonce_id: annonceId, p_quantite: Number(document.getElementById('mp-achat-qte').value), p_mode_paiement: document.getElementById('mp-achat-mode').value });
+    const moyen = document.getElementById('mp-achat-moyen').value;
+    const { error: err } = await sb.rpc('marche_acheter', {
+      p_annonce_id: annonceId, p_quantite: Number(document.getElementById('mp-achat-qte').value),
+      p_mode_paiement: document.getElementById('mp-achat-mode').value, p_moyen: moyen,
+      p_carte_numero: moyen === 'carte' ? document.getElementById('mp-achat-carte-numero').value : null,
+      p_carte_nip: moyen === 'carte' ? document.getElementById('mp-achat-carte-nip').value : null,
+      p_cib: moyen === 'cib' ? document.getElementById('mp-achat-cib').value : null
+    });
     entMsg('mp-achat-message', err, 'Achat effectué — facture dans Mes achats.');
     if (!err) mpChargerMesAchats();
   };
