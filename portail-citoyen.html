@@ -1825,7 +1825,15 @@ function initialiserOngletPermis(citoyen) {
     const adresse = document.getElementById('permis-adresse').value.trim();
     const msg = document.getElementById('permis-message');
     if (!adresse) { msg.innerHTML = '<p class="pc-erreur">Une adresse de livraison est requise.</p>'; return; }
-    const { error } = await sb.rpc('acheter_permis', { p_type: type, p_adresse_livraison: adresse });
+    const moyen = confirm('Payer par carte ? (OK = carte, Annuler = CIB d\'envoi d\'entreprise)') ? 'carte' : 'cib';
+    const params = { p_type: type, p_adresse_livraison: adresse, p_moyen: moyen };
+    if (moyen === 'carte') {
+      params.p_carte_numero = prompt('Numéro de carte (12 chiffres) :'); if (!params.p_carte_numero) return;
+      params.p_carte_nip = prompt('NIP :'); if (!params.p_carte_nip) return;
+    } else {
+      params.p_cib = prompt('CIB d\'envoi :'); if (!params.p_cib) return;
+    }
+    const { error } = await sb.rpc('acheter_permis', params);
     msg.innerHTML = error ? `<p class="pc-erreur">${error.message}</p>` : '<p class="pc-succes">Permis acheté, en cours de livraison à l\'adresse fournie.</p>';
     if (!error) { document.getElementById('permis-adresse').value = ''; chargerPermis(citoyen); }
   };
@@ -2055,7 +2063,15 @@ async function chargerConstats(citoyen) {
   data.forEach(c => {
     const btnPayer = document.getElementById('payer-constat-' + c.id);
     if (btnPayer) btnPayer.onclick = async () => {
-      const { error } = await sb.rpc('payer_constat', { p_id: c.id });
+      const moyen = confirm('Payer par carte ? (OK = carte, Annuler = CIB d\'envoi d\'entreprise)') ? 'carte' : 'cib';
+      const params = { p_id: c.id, p_moyen: moyen };
+      if (moyen === 'carte') {
+        params.p_carte_numero = prompt('Numéro de carte (12 chiffres) :'); if (!params.p_carte_numero) return;
+        params.p_carte_nip = prompt('NIP :'); if (!params.p_carte_nip) return;
+      } else {
+        params.p_cib = prompt('CIB d\'envoi :'); if (!params.p_cib) return;
+      }
+      const { error } = await sb.rpc('payer_constat', params);
       if (error) alert(error.message); else chargerConstats(citoyen);
     };
     const btnRetirer = document.getElementById('retirer-constat-' + c.id);
