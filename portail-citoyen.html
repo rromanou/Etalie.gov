@@ -7521,14 +7521,14 @@ async function polOuvrirGestion(comisseriatId) {
   zone.innerHTML = `
     <h5>Embaucher</h5>
     <div class="pc-champ"><label>Nom d'utilisateur</label><input type="text" id="pol-embaucher-username"></div>
-    <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="pol-embaucher">Embaucher (Cadet)</button>
+    <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="pol-embaucher">Embaucher (Recrues)</button>
     <div id="pol-embaucher-message"></div>
 
     <h5 style="margin-top:12px;">Membres</h5>
     ${(membres || []).length ? membres.map(m => `
       <div class="pm-fleet-item"><div class="entete"><strong>@${escHtml(m.username)}</strong> — ${escHtml(m.nom_grade)} (matricule ${escHtml(m.matricule)})</div>
         <div class="pm-ligne-boutons">
-          <select data-pol-grade="${m.id}">${Array.from({length:15},(_,i)=>i+1).map(g => `<option value="${g}" ${g===m.grade?'selected':''}>${g}. ${escHtml(_nomGradeClient(g))}</option>`).join('')}</select>
+          <select data-pol-grade="${m.id}">${Array.from({length:21},(_,i)=>i+1).map(g => `<option value="${g}" ${g===m.grade?'selected':''}>${g}. ${escHtml(_nomGradeClient(g))}</option>`).join('')}</select>
           <select data-pol-sgrade="${m.id}"><option value="1" ${m.sous_grade===1?'selected':''}>3e classe</option><option value="2" ${m.sous_grade===2?'selected':''}>2e classe</option><option value="3" ${m.sous_grade===3?'selected':''}>1re classe</option></select>
           <button class="pc-lien" data-pol-promouvoir="${m.id}">Appliquer</button>
           <button class="pc-lien" data-pol-renvoyer="${m.id}">Renvoyer</button>
@@ -7568,9 +7568,12 @@ async function polOuvrirGestion(comisseriatId) {
 }
 
 function _nomGradeClient(g) {
-  const noms = ['Cadet','Agent','Agent principal','Caporal','Caporal-chef','Brigadier','Brigadier-chef',
-    'Sergent','Sergent-chef','Lieutenant','Capitaine','Commandant','Inspecteur','Inspecteur-chef','Directeur-adjoint'];
-  return noms[Math.max(1, Math.min(15, g)) - 1];
+  // Les 21 grades officiels (identiques à _grades_police() côté SQL, patch 28).
+  const noms = ['Recrues','Milites','Caporal','Caporal-À-Vous','Haut-Caporal','Adsistan','Capitaine',
+    'Capitaine-de-base','Grand-Capitaine-Assistant','Grand-Capitaine','Sous-Major-Assistant','Major',
+    'Lieutenant','Général','Lieutenant-Général','Noble-Major','Lieutenant-Général-Major','Sous-Majest',
+    'Majesté','Majest','Impérialis'];
+  return noms[Math.max(1, Math.min(21, g)) - 1];
 }
 
 /* =====================================================================
