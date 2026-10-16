@@ -2680,6 +2680,12 @@ function panneauAdminHTML() {
       </div>
 
       <div class="pc-carte">
+        <h3>Recrutements policiers à approuver</h3>
+        <p class="pm-mini">Modifiez num_CAS.txt (CAS encrypté + nom de l'agent), puis cliquez sur « Monter de rang » : la personne devient Recrue de son commissariat.</p>
+        <div id="a-recrutements"><p class="pm-mini">Chargement…</p></div>
+      </div>
+
+      <div class="pc-carte">
         <h3>Armée — grades et taux</h3>
         <div class="pc-champ"><label>Nom d'utilisateur</label><input type="text" id="a-mil-username"></div>
         <div class="pc-champ"><label>Grade</label><select id="a-mil-grade">
@@ -3069,6 +3075,21 @@ function initialiserPanneauAdmin() {
     entMsg('a-bq-pub-message', error, 'Accès retiré.');
   };
 
+  const chargerRecrutements = async () => {
+    const z = document.getElementById('a-recrutements');
+    if (!z) return;
+    const { data } = await rpcSafe('gouv_liste_recrutements', {}, []);
+    z.innerHTML = (data || []).length ? data.map(r => `
+      <div class="pm-fleet-item"><div class="entete"><strong>@${escHtml(r.username)}</strong> — ${escHtml(r.comisseriat)} (${escHtml(r.comisseriat_code || '')})</div>
+        <p class="pm-mini">Ligne pour num_CAS.txt : <code>${escHtml(r.cas_encrypte)} ${escHtml(r.nom || r.username)}</code>${r.matricule ? ' — matricule demandé : ' + escHtml(r.matricule) : ''}</p>
+        <div class="pm-ligne-boutons"><button class="pc-lien" data-rec-oui="${r.id}">Monter de rang</button><button class="pc-lien" data-rec-non="${r.id}">Refuser</button></div></div>`).join('') : '<p class="pm-mini">Aucune demande.</p>';
+    z.querySelectorAll('[data-rec-oui],[data-rec-non]').forEach(b => b.onclick = async () => {
+      const oui = b.dataset.recOui !== undefined;
+      const { error } = await sb.rpc('gouv_traiter_recrutement', { p_id: oui ? b.dataset.recOui : b.dataset.recNon, p_decision: oui ? 'acceptee' : 'refusee' });
+      if (error) alert(error.message); else chargerRecrutements();
+    });
+  };
+  chargerRecrutements();
   document.getElementById('a-mil-assigner').onclick = async () => {
     const { error } = await sb.rpc('gouv_assigner_grade_militaire', {
       p_username: document.getElementById('a-mil-username').value, p_grade: document.getElementById('a-mil-grade').value || null
@@ -4842,6 +4863,11 @@ async function entOuvrirDetail(entrepriseId, silencieux) {
         <div class="pc-champ"><label>Minimum achetable en % (défaut 0,01)</label><input type="number" id="ent-cap-min" min="0.01" step="0.01" value="${e.capital_min_achat_pct}"></div>
         <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="ent-cap-appliquer">Enregistrer l'offre</button>
         <div id="ent-cap-message"></div>
+        <h5 style="margin-top:12px;">Programme Albatros sur le capital</h5>
+        <label style="font-size:.85rem;"><input type="checkbox" id="ent-cap-alb-actif" > Permettre de payer l'achat de capital en versements mensuels</label>
+        <div class="pc-champ"><label>Nombre de mois (2 à 60)</label><input type="number" id="ent-cap-alb-mois" min="2" max="60" value="6"></div>
+        <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="ent-cap-alb-appliquer">Enregistrer Albatros</button>
+        <div id="ent-cap-alb-message"></div>
       </div>` : ''}
 
       ${a('deposer_impot') ? `
@@ -4998,6 +5024,15 @@ async function entOuvrirDetail(entrepriseId, silencieux) {
       if (err) alert(err.message); else rechargerDetail();
     });
   }
+  if (q('#ent-cap-alb-appliquer')) {
+    rpcSafe('entreprise_capital_albatros', { p_entreprise_id: entrepriseId }, null).then(({ data: alb }) => {
+      if (alb) { q('#ent-cap-alb-actif').checked = Boolean(alb.actif); if (alb.mois) q('#ent-cap-alb-mois').value = alb.mois; }
+    });
+  }
+  if (q('#ent-cap-alb-appliquer')) q('#ent-cap-alb-appliquer').onclick = async () => {
+    const { error: err } = await sb.rpc('entreprise_configurer_capital_albatros', { p_entreprise_id: entrepriseId, p_actif: q('#ent-cap-alb-actif').checked, p_mois: Number(q('#ent-cap-alb-mois').value) || null });
+    entMsg('ent-cap-alb-message', err, 'Programme Albatros enregistré.');
+  };
   if (q('#ent-cap-appliquer')) q('#ent-cap-appliquer').onclick = async () => {
     const max = q('#ent-cap-max').value;
     const { error: err } = await sb.rpc('entreprise_mettre_capital_en_vente', {
@@ -6286,7 +6321,8 @@ async function initialiserMarcheExterieur() {
         <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer; font-size:.78rem; padding:6px 14px;" data-me-calculer="${o.entreprise_id}">Estimer le gain</button>
         <div data-me-estimation="${o.entreprise_id}"></div>
         ${pmZone('me-' + o.entreprise_id)}
-        <button class="bouton bouton-or" style="border:none; cursor:pointer;" data-me-acheter="${o.entreprise_id}">Acheter</button>
+        <button class="bouton bouton-or" style="border:none; cursor:pointer;" data-me-acheter="${o.entreprise_id}">Acheter comptant</button>
+        ${o.albatros ? `<button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" data-me-acheter-alb="${o.entreprise_id}">Acheter avec Albatros (${o.albatros_mois} mois)</button>` : ''}
         <div data-me-fiche="${o.entreprise_id}"></div>
       </div>`).join('') : '<p class="pm-mini">Aucune.</p>'}
     <h5 style="margin-top:16px;">Particuliers</h5>
@@ -6342,6 +6378,31 @@ async function initialiserMarcheExterieur() {
     const { error } = await sb.rpc('entreprise_acheter_capital', { p_entreprise_id: id, p_pourcentage: pct, ...pmParamsRpc(pm) });
     if (!error) await pmSauverSiDemande(pm);
     if (error) alert(error.message); else { alert('Achat effectué.'); initialiserMarcheExterieur(); }
+  });
+  zone.querySelectorAll('[data-me-acheter-alb]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.meAcheterAlb;
+    const pct = Number(zone.querySelector(`[data-me-calc-pct="${id}"]`).value);
+    if (!pct) { alert('Entrez un pourcentage.'); return; }
+    const pm = pmLire(`[data-pm="me-${id}"]`);
+    const { error } = await sb.rpc('entreprise_acheter_capital_albatros', { p_entreprise_id: id, p_pourcentage: pct, ...pmParamsRpc(pm) });
+    if (!error) await pmSauverSiDemande(pm);
+    if (error) alert(error.message); else { alert('Achat effectué : premier versement payé, les autres suivent chaque mois.'); initialiserMarcheExterieur(); }
+  });
+  rpcSafe('mes_factures_albatros_capital', {}, []).then(({ data }) => {
+    const f = (data || []).filter(x => x.statut === 'active');
+    if (!f.length) return;
+    const zf = document.createElement('div');
+    zf.innerHTML = `<h5 style="margin-top:16px;">Mes versements Albatros (capital)</h5>` + f.map(x => `
+      <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(x.entreprise)}</strong> (${escHtml(x.entreprise_code || '')}) — ${Number(x.pourcentage).toFixed(2)} %</div>
+        <p class="pm-mini">${x.mois_payes}/${x.mois_total} versements — ${fmtR(x.montant_mensuel)} R$ par mois — prochain dû le ${new Date(x.prochain_du).toLocaleDateString('fr-FR')}</p>
+        ${pmZone('cal-' + x.id)}<button class="pc-lien" data-cal-verser="${x.id}">Payer le versement</button></div>`).join('');
+    zone.appendChild(zf);
+    pmMonter('[data-pm^="cal-"]');
+    zf.querySelectorAll('[data-cal-verser]').forEach(b => b.onclick = async () => {
+      const pm = pmLire(`[data-pm="cal-${b.dataset.calVerser}"]`);
+      const { error } = await sb.rpc('payer_versement_capital_albatros', { p_facture_id: b.dataset.calVerser, ...pmParamsRpc(pm) });
+      if (error) alert(error.message); else { await pmSauverSiDemande(pm); initialiserMarcheExterieur(); }
+    });
   });
   pmMonter('[data-pm^="me-"], [data-pm^="met-"]');
   zone.querySelectorAll('[data-me-tiers-acheter]').forEach(b => b.onclick = async () => {
@@ -6770,7 +6831,7 @@ async function bqChargerTout() {
       <div class="pm-ligne-boutons">
         <button class="bouton bouton-or" style="border:none; cursor:pointer;" data-bq-deposer="${c.banque_id}">Déposer</button>
         <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" data-bq-retirer="${c.banque_id}">Retirer</button>
-        ${c.publique ? `<button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" data-bq-quitter="${c.banque_id}">Quitter</button>` : ''}
+        <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" data-bq-quitter="${c.banque_id}" data-bq-publique="${c.publique ? '1' : ''}">Quitter</button>
       </div></div>`).join('') : '<p class="pm-mini">Aucun compte.</p>';
 
   document.querySelectorAll('[data-bq-deposer]').forEach(b => b.onclick = async () => {
@@ -6784,8 +6845,9 @@ async function bqChargerTout() {
     if (error) alert(error.message); else bqChargerTout();
   });
   document.querySelectorAll('[data-bq-quitter]').forEach(b => b.onclick = async () => {
-    if (!confirm('Quitter cette banque publique ? Le solde vous sera reversé.')) return;
-    const { error } = await sb.rpc('banque_quitter_publique', { p_banque_id: b.dataset.bqQuitter });
+    const estProprio = Object.values(bqBanquesCache).some(x => x.id === b.dataset.bqQuitter && x.moi_gestionnaire);
+    if (!confirm(estProprio ? 'Quitter cette banque la supprime : tous les clients seront remboursés. Continuer ?' : 'Quitter cette banque ? Votre solde vous sera reversé.')) return;
+    const { error } = await sb.rpc('banque_quitter', { p_banque_id: b.dataset.bqQuitter });
     if (error) alert(error.message); else bqChargerTout();
   });
 
@@ -6852,6 +6914,16 @@ async function bqOuvrirDetail(banqueId) {
       <div class="pc-champ" style="margin-top:8px;"><label>Mot de passe (pour dissoudre)</label><input type="password" id="bq-dissoudre-mdp"></div>
       <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-dissoudre">Dissoudre la banque</button>` : ''}
 
+      ${banque.publique ? `
+      <h5 style="margin-top:12px;">Épargne des membres (gestion sans permission, comme un conseiller financier)</h5>
+      <div id="bq-membres"><p class="pm-mini">Chargement…</p></div>
+      <div class="pc-champ"><label>Membre (nom d'utilisateur)</label><input type="text" id="bq-gm-username"></div>
+      <div class="pc-champ"><label>Montant à virer vers la trésorerie du membre (R$)</label><input type="number" step="0.01" min="0" id="bq-gm-montant"></div>
+      <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-gm-virer">Virer vers le membre</button>
+      <div class="pc-champ"><label>Investir pour ce membre : numéro de suivi de l'entreprise (E-…)</label><input type="text" id="bq-gm-entreprise"></div>
+      <div class="pc-champ"><label>Pourcentage à acheter</label><input type="number" step="0.01" min="0.01" id="bq-gm-pct"></div>
+      <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-gm-investir">Investir pour le membre</button>
+      <div id="bq-gm-message"></div>` : ''}
       ${banque.publique && banque.moi_proprietaire ? `
       <h5 style="margin-top:12px;">Cartes de paiement proposées (propriétaire seulement)</h5>
       <div id="bq-cartes-config"><p class="pm-mini">Chargement…</p></div>
@@ -6899,6 +6971,23 @@ async function bqOuvrirDetail(banqueId) {
     if (error) alert(error.message); else { alert('Banque déclarée publique.'); bqChargerTout(); }
   };
   if (banque.publique && banque.moi_proprietaire) bqRenduCartesConfig(banqueId);
+  if (banque.publique) {
+    rpcSafe('banque_publique_membres', { p_banque_id: banqueId }, []).then(({ data }) => {
+      const z = document.getElementById('bq-membres');
+      if (z) z.innerHTML = (data || []).length ? data.map(m => `<p class="pm-mini">@${escHtml(m.username)} — ${fmtR(m.solde)} R$</p>`).join('') : '<p class="pm-mini">Aucun membre.</p>';
+    });
+    document.getElementById('bq-gm-virer').onclick = async () => {
+      const { error } = await sb.rpc('banque_publique_virer_vers_membre', { p_banque_id: banqueId, p_username: document.getElementById('bq-gm-username').value, p_montant: Number(document.getElementById('bq-gm-montant').value) });
+      entMsg('bq-gm-message', error, 'Montant viré.');
+      if (!error) bqOuvrirDetail(banqueId);
+    };
+    document.getElementById('bq-gm-investir').onclick = async () => {
+      let entId; try { entId = await resoudreCode('entreprise', document.getElementById('bq-gm-entreprise').value); } catch (e) { entMsg('bq-gm-message', e, ''); return; }
+      const { error } = await sb.rpc('banque_publique_investir_pour_membre', { p_banque_id: banqueId, p_username: document.getElementById('bq-gm-username').value, p_entreprise_id: entId, p_pourcentage: Number(document.getElementById('bq-gm-pct').value) });
+      entMsg('bq-gm-message', error, 'Investissement effectué pour le membre.');
+      if (!error) bqOuvrirDetail(banqueId);
+    };
+  }
   if (banque.moi_proprietaire) document.getElementById('bq-dissoudre').onclick = async () => {
     if (!confirm('Dissoudre définitivement cette banque ?')) return;
     const { error } = await sb.rpc('banque_dissoudre', { p_banque_id: banqueId, p_mdp: document.getElementById('bq-dissoudre-mdp').value });
@@ -7228,12 +7317,15 @@ async function mpChargerMesAchats() {
     z.innerHTML = `
       <div class="pc-champ"><label>Rapidité</label>${etoiles('mp-liv-rapidite-' + id)}</div>
       <div class="pc-champ"><label>État de l'objet</label>${etoiles('mp-liv-etat-' + id)}</div>
+      <div class="pc-champ"><label>Entreprise de livraison (bureau de poste)</label>${etoiles('mp-liv-bureau-' + id)}</div>
+      <p class="pm-mini">Si vous avez déjà noté cette personne ou ce bureau, la note existante est modifiée.</p>
       <button class="bouton bouton-or" style="border:none; cursor:pointer;" data-mp-confirmer-livreur="${id}">Enregistrer</button>`;
     z.querySelector('[data-mp-confirmer-livreur]').onclick = async () => {
       const { error: err } = await sb.rpc('marche_noter_livreur', {
         p_achat_id: id, p_rapidite: Number(document.getElementById('mp-liv-rapidite-' + id).value), p_etat: Number(document.getElementById('mp-liv-etat-' + id).value)
       });
-      if (err) alert(err.message); else { alert('Évaluation du livreur enregistrée.'); z.innerHTML = ''; }
+      const { error: errB } = await sb.rpc('marche_noter_bureau_poste', { p_achat_id: id, p_note: Number(document.getElementById('mp-liv-bureau-' + id).value) });
+      if (err) alert(err.message); else if (errB && !/aucun bureau/i.test(errB.message)) alert(errB.message); else { alert('Évaluations enregistrées.'); z.innerHTML = ''; }
     };
   });
 
@@ -7562,23 +7654,29 @@ function panneauPoliceHTML() {
       <div class="pc-carte" id="pol-infraction-carte" style="display:none;">
         <h3>Dresser une infraction</h3>
         <div class="pc-champ"><label>Citoyen (nom d'utilisateur)</label><input type="text" id="pol-inf-username"></div>
-        <div class="pc-champ"><label>Palier</label>
+        <div class="pc-champ"><label>Type d'infraction</label>
           <select id="pol-inf-palier">
-            <option value="1">1 — Infraction mineure</option>
-            <option value="2">2 — Délit</option>
-            <option value="3">3 — Délit grave</option>
-            <option value="4">4 — Crime</option>
-            <option value="5">5 — Crime contre l'humanité</option>
-            <option value="6">6 — Crime contre la Couronne</option>
+            <option value="1">Infraction mineure (mène à un constat)</option>
+            <option value="2">Infraction majeure (mène à la prison)</option>
+            <option value="3">Infraction perpétuité (100 ans de prison)</option>
+            <option value="4">Infraction post-mortem (plus de 100 ans)</option>
+            <option value="5">Infraction contre l'humanité (sécurité de plus de 120 personnes)</option>
+            <option value="6">Infraction royale (contre la famille royale)</option>
           </select>
         </div>
         <div class="pc-champ"><label>Titre</label><input type="text" id="pol-inf-titre"></div>
         <div class="pc-champ"><label>Description</label><textarea id="pol-inf-description"></textarea></div>
-        <div class="pc-champ"><label>Lieu</label><input type="text" id="pol-inf-lieu"></div>
+        <div class="pc-champ"><label>Lieu complet de l'incident</label><input type="text" id="pol-inf-lieu"></div>
+        <div class="pc-champ"><label>Date et heure de l'incident</label><input type="datetime-local" id="pol-inf-date"></div>
         <div class="pc-champ"><label>Témoins</label><input type="text" id="pol-inf-temoins"></div>
-        <div class="pc-champ"><label>Preuve (PDF/image, optionnel)</label><input type="file" id="pol-inf-preuve"></div>
-        <div class="pc-champ"><label>Amende (R$)</label><input type="number" step="0.01" min="0" id="pol-inf-amende" value="0"></div>
-        <div class="pc-champ"><label>Peine de prison (jours)</label><input type="number" step="0.01" min="0" id="pol-inf-duree" value="0"></div>
+        <div class="pc-champ"><label>Matricule de l'agent qui a vu l'incident</label><input type="text" maxlength="7" id="pol-inf-matricule-temoin"></div>
+        <div class="pc-champ"><label>Preuve (fichier de préférence, pas obligatoire)</label><input type="file" id="pol-inf-preuve"></div>
+        <div class="pc-champ"><label>Amende (R$) — infraction mineure</label><input type="number" step="0.01" min="0" id="pol-inf-amende" value="0"></div>
+        <p class="pm-mini">À partir d'une infraction majeure : une comparaison doit avoir eu lieu et le juge doit avoir criminalisé la personne.</p>
+        <div class="pc-champ"><label>Numéro de suivi du résultat de la comparaison (infraction majeure et plus)</label><input type="text" id="pol-inf-comparaison"></div>
+        <div class="pc-champ"><label>Peine de prison décidée au tribunal (jours)</label><input type="number" step="0.01" min="0" id="pol-inf-duree" value="0"></div>
+        <div class="pc-champ"><label>Prison où la peine sera purgée</label><select id="pol-inf-prison"><option value="">Mon commissariat</option></select></div>
+        <p class="pm-mini">Le début et la fin de la peine sont calculés automatiquement ; les peines qui se chevauchent sont purgées l'une après l'autre.</p>
         <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="pol-inf-dresser">Dresser l'infraction</button>
         <div id="pol-inf-message"></div>
       </div>
@@ -7600,20 +7698,40 @@ async function initialiserPanneauPolice() {
   zone.innerHTML = poste ? `
     <p class="pm-mini">Commissariat : <strong>${escHtml(poste.comisseriat_nom)}</strong> (${escHtml(poste.comisseriat_type)})</p>
     <p class="pm-mini">Matricule : ${escHtml(poste.matricule)} — Grade : ${escHtml(poste.nom_grade)} (${poste.sous_grade === 3 ? '1re' : poste.sous_grade === 2 ? '2e' : '3e'} classe)${poste.est_directeur ? ' — Directeur' : ''}</p>
-    <div class="pc-champ"><label>Commissariat de destination</label><select id="pol-transfert-dest"></select></div>
-    <button class="pc-lien" id="pol-demander-transfert">Demander un transfert</button>
-    <div id="pol-transfert-message"></div>` : '<p class="pm-mini">Vous n\'occupez aucun poste policier actuellement.</p>';
+    <div id="pol-transferts-policier"></div>` : '<p class="pm-mini">Vous n\'occupez aucun poste policier actuellement.</p>';
 
   if (poste) {
-    rpcSafe('liste_comisseriats', {}, []).then(({ data }) => {
-      const sel = document.getElementById('pol-transfert-dest');
-      if (sel) sel.innerHTML = (data || []).filter(c => c.id !== poste.comisseriat_id).map(c => `<option value="${escHtml(c.id)}">${escHtml(c.nom)} (${escHtml(c.code || '')})</option>`).join('');
+    rpcSafe('mes_transferts_policier', {}, []).then(({ data }) => {
+      const z = document.getElementById('pol-transferts-policier');
+      if (!z) return;
+      z.innerHTML = (data || []).map(t => `<p class="pm-mini">Transfert proposé : ${escHtml(t.comisseriat_source)} vers ${escHtml(t.comisseriat_dest)} (vous repartiriez au bas des grades).
+        <button class="pc-lien" data-pol-rep-oui="${t.id}">Accepter</button> <button class="pc-lien" data-pol-rep-non="${t.id}">Refuser</button></p>`).join('');
+      z.querySelectorAll('[data-pol-rep-oui],[data-pol-rep-non]').forEach(b => b.onclick = async () => {
+        const oui = b.dataset.polRepOui !== undefined;
+        const { error } = await sb.rpc('comisseriat_repondre_transfert', { p_id: oui ? b.dataset.polRepOui : b.dataset.polRepNon, p_decision: oui ? 'acceptee' : 'refusee' });
+        if (error) alert(error.message); else initialiserPanneauPolice();
+      });
     });
-    document.getElementById('pol-demander-transfert').onclick = async () => {
-      const { error } = await sb.rpc('comisseriat_demander_transfert', { p_comisseriat_dest: document.getElementById('pol-transfert-dest').value });
-      entMsg('pol-transfert-message', error, 'Demande de transfert envoyée.');
-    };
+    rpcSafe('liste_comisseriats', {}, []).then(({ data }) => {
+      const sel = document.getElementById('pol-inf-prison');
+      if (sel) sel.innerHTML = '<option value="">Mon commissariat</option>' + (data || []).map(c => `<option value="${escHtml(c.code || '')}">${escHtml(c.nom)} (${escHtml(c.code || '')})</option>`).join('');
+    });
     document.getElementById('pol-infraction-carte').style.display = '';
+    if (poste.comisseriat_type === 'police_royale_militaire') {
+      const zp = document.createElement('div');
+      zp.className = 'pc-carte';
+      zp.innerHTML = `<h3>Recruter une Recrue militaire</h3>
+        <p class="pm-mini">La police royale militaire grade les civils en Recrue militaire (pas plus haut). Le code d'assurance sociale du civil est requis.</p>
+        <div class="pc-champ"><label>Nom d'utilisateur du civil</label><input type="text" id="prm-username"></div>
+        <div class="pc-champ"><label>Code d'assurance sociale (CAS)</label><input type="text" id="prm-cas"></div>
+        <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="prm-recruter">Grader en Recrue militaire</button>
+        <div id="prm-message"></div>`;
+      document.getElementById('pol-infraction-carte').before(zp);
+      document.getElementById('prm-recruter').onclick = async () => {
+        const { error } = await sb.rpc('police_militaire_recruter', { p_username: document.getElementById('prm-username').value, p_cas_encrypte: encrypterCode(document.getElementById('prm-cas').value.trim()) });
+        entMsg('prm-message', error, 'Recrue militaire créée.');
+      };
+    }
   }
 
   const { data: commissariats } = await sb.rpc('liste_comisseriats');
@@ -7641,10 +7759,30 @@ async function initialiserPanneauPolice() {
         zd.innerHTML = (det || []).length ? det.map(c => `
           <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(c.nom_palier)}</strong> — ${escHtml(c.titre)} — <em>${c.statut === 'annule' ? 'annulée' : 'condamnation'}</em></div>
             <p class="pm-mini">${escHtml(c.description)}</p>
-            <p class="pm-mini">Agent : @${escHtml(c.agent)} — ${escHtml(c.comisseriat)} — lieu : ${escHtml(c.lieu || '—')} — témoins : ${escHtml(c.temoins || '—')}</p>
-            <p class="pm-mini">Amende : ${fmtR(c.amende)} R$ — prison : ${c.duree_prison_jours} jour(s)${c.peine_fin ? ' (jusqu\'au ' + new Date(c.peine_fin).toLocaleDateString('fr-FR') + ')' : ''}</p>
+            <p class="pm-mini">Agent : @${escHtml(c.agent)} (matricule ${escHtml(c.matricule_agent || '—')}) — ${escHtml(c.comisseriat)} — agent témoin : ${escHtml(c.matricule_temoin || '—')}</p>
+            <p class="pm-mini">Incident : ${new Date(c.date_infraction).toLocaleString('fr-FR')} — lieu : ${escHtml(c.lieu || '—')} — témoins : ${escHtml(c.temoins || '—')}</p>
+            ${c.numero_comparaison ? `<p class="pm-mini">Comparaison n° ${escHtml(c.numero_comparaison)}</p>` : ''}
+            <p class="pm-mini">Amende : ${fmtR(c.amende)} R$ — prison : ${Number(c.duree_prison_jours).toFixed(2)} jour(s)${c.prison ? ' à ' + escHtml(c.prison) : ''}${c.peine_debut ? ' — du ' + new Date(c.peine_debut).toLocaleString('fr-FR') : ''}${c.peine_fin ? ' au ' + new Date(c.peine_fin).toLocaleString('fr-FR') : ''}</p>
+            ${(c.preuves || []).length ? `<p class="pm-mini">Preuve : <a href="#" data-pol-preuve="${escHtml(c.preuves[0])}">ouvrir le fichier</a></p>` : ''}
+            ${(c.modifications || []).map(m => `<p class="pm-mini">Peine modifiée de ${m.secondes > 0 ? '+' : ''}${m.secondes} s (matricule ${escHtml(m.matricule || '—')}) : ${escHtml(m.motif)}</p>`).join('')}
+            ${c.statut !== 'annule' && c.peine_fin ? `<button class="pc-lien" data-pol-modifier-peine="${c.id}">Modifier la peine</button>` : ''}
             ${c.statut === 'annule' ? `<p class="pm-mini">Motif d'annulation : ${escHtml(c.motif_annulation || '')}</p>` : `<button class="pc-lien" data-pol-annuler="${c.id}">Annuler cette infraction</button>`}
           </div>`).join('') : '<p class="pm-mini">Aucune.</p>';
+        zd.querySelectorAll('[data-pol-preuve]').forEach(a => a.onclick = async (ev) => {
+          ev.preventDefault();
+          const { data: u } = await sb.storage.from('documents-citoyens').createSignedUrl(a.dataset.polPreuve, 3600);
+          if (u) window.open(u.signedUrl, '_blank'); else alert('Fichier inaccessible.');
+        });
+        zd.querySelectorAll('[data-pol-modifier-peine]').forEach(b => b.onclick = async () => {
+          const sens = prompt('Ajouter du temps (A) ou en retirer (R) ?', 'A');
+          if (!sens) return;
+          const h = Number(prompt('Heures :', '0')) || 0, mi = Number(prompt('Minutes :', '0')) || 0, se = Number(prompt('Secondes :', '0')) || 0;
+          const total = (h * 3600 + mi * 60 + se) * (/^r/i.test(sens) ? -1 : 1);
+          const motif = prompt('Motif valable (obligatoire) :');
+          if (!motif) return;
+          const { error: errM } = await sb.rpc('comisseriat_modifier_peine', { p_infraction_id: b.dataset.polModifierPeine, p_secondes: total, p_motif: motif });
+          if (errM) alert(errM.message); else document.getElementById('pol-casier-complet').click();
+        });
         zd.querySelectorAll('[data-pol-annuler]').forEach(b => b.onclick = async () => {
           const motif = prompt('Motif d\'annulation :');
           if (!motif) return;
@@ -7672,9 +7810,13 @@ async function initialiserPanneauPolice() {
         p_titre: document.getElementById('pol-inf-titre').value,
         p_description: document.getElementById('pol-inf-description').value,
         p_lieu: document.getElementById('pol-inf-lieu').value || null,
+        p_date_incident: document.getElementById('pol-inf-date').value ? new Date(document.getElementById('pol-inf-date').value).toISOString() : null,
         p_preuves: preuves, p_temoins: document.getElementById('pol-inf-temoins').value || null,
+        p_matricule_temoin: document.getElementById('pol-inf-matricule-temoin').value || null,
+        p_numero_comparaison: document.getElementById('pol-inf-comparaison').value || null,
         p_amende: Number(document.getElementById('pol-inf-amende').value) || 0,
-        p_duree_prison_jours: Number(document.getElementById('pol-inf-duree').value) || 0
+        p_duree_prison_jours: Number(document.getElementById('pol-inf-duree').value) || 0,
+        p_prison_code: document.getElementById('pol-inf-prison').value || null
       });
       entMsg('pol-inf-message', error, 'Infraction dressée.');
     } catch (err) { entMsg('pol-inf-message', err); }
@@ -7690,9 +7832,15 @@ async function polOuvrirGestion(comisseriatId) {
   ]);
   zone.innerHTML = `
     <h5>Embaucher</h5>
+    <p class="pm-mini">La demande est envoyée au gouvernement, qui modifie num_CAS.txt puis fait monter la personne de rang. Le matricule (7 chiffres) est permanent, unique et ne change jamais, même en changeant de commissariat.</p>
     <div class="pc-champ"><label>Nom d'utilisateur</label><input type="text" id="pol-embaucher-username"></div>
-    <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="pol-embaucher">Embaucher (Recrues)</button>
+    <div class="pc-champ"><label>Matricule à 7 chiffres (laisser vide pour en générer un)</label><input type="text" maxlength="7" id="pol-embaucher-matricule"></div>
+    <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="pol-embaucher">Recruter (demande au gouvernement)</button>
     <div id="pol-embaucher-message"></div>
+    <h5 style="margin-top:12px;">Demander un policier d'un autre commissariat</h5>
+    <div class="pc-champ"><label>Matricule du policier</label><input type="text" maxlength="7" id="pol-demander-matricule"></div>
+    <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="pol-demander-policier">Envoyer la demande</button>
+    <div id="pol-demander-message"></div>
 
     <h5 style="margin-top:12px;">Membres</h5>
     ${(membres || []).length ? membres.map(m => `
@@ -7704,16 +7852,19 @@ async function polOuvrirGestion(comisseriatId) {
           <button class="pc-lien" data-pol-renvoyer="${m.id}">Renvoyer</button>
         </div></div>`).join('') : '<p class="pm-mini">Aucun membre.</p>'}
 
-    <h5 style="margin-top:12px;">Demandes de transfert reçues</h5>
+    <h5 style="margin-top:12px;">Demandes de transfert de vos policiers</h5>
     ${(demandes || []).length ? demandes.map(d => `
-      <p class="pm-mini">@${escHtml(d.citoyen)} — depuis ${escHtml(d.comisseriat_source)}
+      <p class="pm-mini">@${escHtml(d.citoyen)} — demandé par ${escHtml(d.comisseriat_dest)}
         <button class="pc-lien" data-pol-transfert-accepter="${d.id}">Accepter</button>
         <button class="pc-lien" data-pol-transfert-refuser="${d.id}">Refuser</button></p>`).join('') : '<p class="pm-mini">Aucune.</p>'}
   `;
   document.getElementById('pol-embaucher').onclick = async () => {
-    const { error } = await sb.rpc('comisseriat_embaucher', { p_comisseriat_id: comisseriatId, p_username: document.getElementById('pol-embaucher-username').value });
-    entMsg('pol-embaucher-message', error, 'Embauché.');
-    if (!error) polOuvrirGestion(comisseriatId);
+    const { error } = await sb.rpc('comisseriat_embaucher', { p_comisseriat_id: comisseriatId, p_username: document.getElementById('pol-embaucher-username').value, p_matricule: document.getElementById('pol-embaucher-matricule').value.trim() || null });
+    entMsg('pol-embaucher-message', error, 'Demande envoyée au gouvernement.');
+  };
+  document.getElementById('pol-demander-policier').onclick = async () => {
+    const { error } = await sb.rpc('comisseriat_demander_policier', { p_comisseriat_dest: comisseriatId, p_matricule: document.getElementById('pol-demander-matricule').value.trim() });
+    entMsg('pol-demander-message', error, 'Demande envoyée au commissariat d\'origine.');
   };
   zone.querySelectorAll('[data-pol-promouvoir]').forEach(b => b.onclick = async () => {
     const id = b.dataset.polPromouvoir;
