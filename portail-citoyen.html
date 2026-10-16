@@ -1195,6 +1195,7 @@ async function chargerTableauDeBord(utilisateur) {
           <div style="display:flex; gap:24px; flex-wrap:wrap;">
             <div style="flex:1; min-width:220px;">
               <p style="font-size:.82rem; color:var(--gris-ardoise); margin-bottom:8px;">Payer 50 000 000 R$ pour 60 jours d'accès illimité.</p>
+              ${pmZone("vc-illimite")}
               <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit);" id="vc-payer-illimite">Payer 50 000 000 R$</button>
             </div>
             <div style="flex:1; min-width:220px;">
@@ -1251,10 +1252,7 @@ async function chargerTableauDeBord(utilisateur) {
             <option value="bateau">Permis de navigation de plaisance — 149,99 R$ + taxes (10 % TAN + 5 % Taxe Digitale), renouvelable chaque année - il est obligatoire pour pouvoir conduire un bateau dans les lacs des provinces qui l'acceptent; sans permis ils peuvent conduire les bateaux suivants: kayak, paddle. Mais s'il est accompagné d'un permis de conduite de bateau alors il peut conduire tout-type de bateau (sans les bateaux commerciaux).</option>
           </select>
         </div>
-        <div class="pc-champ"><label>Moyen de paiement</label><select id="permis-moyen"><option value="carte">Carte</option><option value="cib">CIB d'envoi (entreprise)</option></select></div>
-        <div id="permis-moyen-carte"><div class="pc-champ"><label>Numéro de carte (12 chiffres)</label><input type="text" maxlength="12" id="permis-carte-numero"></div>
-          <div class="pc-champ"><label>NIP</label><input type="text" maxlength="6" id="permis-carte-nip"></div></div>
-        <div id="permis-moyen-cib" style="display:none;"><div class="pc-champ"><label>CIB d'envoi</label><input type="text" id="permis-cib"></div></div>
+        ${pmZone("permis")}
         <div id="permis-message"></div>
         <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="permis-acheter">Acheter ce permis</button>
       </div>
@@ -1450,6 +1448,7 @@ function demarrerTicker(userId, citoyen) {
   // La base est synchronisée chaque seconde : TS-Q en priorité, puis
   // TSO, puis le revenu normal (avec taxes et jours fériés).
   minuteurSync = setInterval(async () => {
+   try {
     let resultat;
     if (citoyenActuel.tsq_actif) {
       resultat = await sb.rpc('avancer_tsq', { p_secondes: 1 });
@@ -1467,6 +1466,7 @@ function demarrerTicker(userId, citoyen) {
       majBandeauTravail(data);
       netParMinute = calculerNetParMinute(data);
     }
+   } catch (e) { /* erreur réseau passagère : on réessaie au prochain tick */ }
   }, 1000);
 
   // Vérifie le déclenchement aléatoire du TS-Q environ chaque minute
@@ -1755,9 +1755,12 @@ async function initialiserVirementConsiderable(citoyen) {
     }
   };
 
+  pmMonter('[data-pm="vc-illimite"]');
   document.getElementById('vc-payer-illimite').onclick = async () => {
     const msg = document.getElementById('vc-illimite-message');
-    const { error } = await sb.rpc('payer_virements_illimites');
+    const pm = pmLire('[data-pm="vc-illimite"]');
+    const { error } = await sb.rpc('payer_virements_illimites', pmParamsRpc(pm));
+    if (!error) await pmSauverSiDemande(pm);
     msg.innerHTML = error ? `<p class="pc-erreur">${error.message}</p>` : '<p class="pc-succes">Accès illimité activé pour 60 jours.</p>';
   };
 
@@ -1823,21 +1826,13 @@ async function chargerVirementsConsiderablesRecus(citoyen) {
    PERMIS
    ===================================================================== */
 function initialiserOngletPermis(citoyen) {
-  document.getElementById('permis-moyen').onchange = (e) => {
-    document.getElementById('permis-moyen-carte').style.display = e.target.value === 'carte' ? '' : 'none';
-    document.getElementById('permis-moyen-cib').style.display = e.target.value === 'cib' ? '' : 'none';
-  };
+  pmMonter('[data-pm="permis"]');
   document.getElementById('permis-acheter').onclick = async () => {
     const type = document.getElementById('permis-type').value;
-    const moyen = document.getElementById('permis-moyen').value;
     const msg = document.getElementById('permis-message');
-    const params = {
-      p_type: type, p_moyen: moyen,
-      p_carte_numero: moyen === 'carte' ? document.getElementById('permis-carte-numero').value : null,
-      p_carte_nip: moyen === 'carte' ? document.getElementById('permis-carte-nip').value : null,
-      p_cib: moyen === 'cib' ? document.getElementById('permis-cib').value : null
-    };
-    const { error } = await sb.rpc('acheter_permis', params);
+    const pm = pmLire('[data-pm="permis"]');
+    const { error } = await sb.rpc('acheter_permis', { p_type: type, ...pmParamsRpc(pm) });
+    if (!error) await pmSauverSiDemande(pm);
     msg.innerHTML = error ? `<p class="pc-erreur">${error.message}</p>` : '<p class="pc-succes">Permis acheté.</p>';
     if (!error) chargerPermis(citoyen);
   };
@@ -2060,10 +2055,7 @@ async function chargerConstats(citoyen) {
         ${c.paye ? `<button class="danger" id="retirer-constat-${c.id}">Retirer de ma liste</button>` : ''}
       </div>
       ${!c.paye && !c.annule && !(k && k.statut === 'en_attente') ? `
-      <div class="pc-champ"><label>Moyen de paiement</label><select id="constat-moyen-${c.id}"><option value="carte">Carte</option><option value="cib">CIB d'envoi (entreprise)</option></select></div>
-      <div id="constat-moyen-carte-${c.id}"><div class="pc-champ"><label>Numéro de carte</label><input type="text" maxlength="12" id="constat-carte-numero-${c.id}"></div>
-        <div class="pc-champ"><label>NIP</label><input type="text" maxlength="6" id="constat-carte-nip-${c.id}"></div></div>
-      <div id="constat-moyen-cib-${c.id}" style="display:none;"><div class="pc-champ"><label>CIB d'envoi</label><input type="text" id="constat-cib-${c.id}"></div></div>
+      ${pmZone("constat-"+c.id)}
       ` : ''}
       <div id="contester-zone-${c.id}"></div>
     </div>
@@ -2071,21 +2063,12 @@ async function chargerConstats(citoyen) {
   }).join('');
 
   data.forEach(c => {
-    const selMoyen = document.getElementById('constat-moyen-' + c.id);
-    if (selMoyen) selMoyen.onchange = (e) => {
-      document.getElementById('constat-moyen-carte-' + c.id).style.display = e.target.value === 'carte' ? '' : 'none';
-      document.getElementById('constat-moyen-cib-' + c.id).style.display = e.target.value === 'cib' ? '' : 'none';
-    };
+    pmMonter(`[data-pm="constat-${c.id}"]`);
     const btnPayer = document.getElementById('payer-constat-' + c.id);
     if (btnPayer) btnPayer.onclick = async () => {
-      const moyen = document.getElementById('constat-moyen-' + c.id).value;
-      const params = {
-        p_id: c.id, p_moyen: moyen,
-        p_carte_numero: moyen === 'carte' ? document.getElementById('constat-carte-numero-' + c.id).value : null,
-        p_carte_nip: moyen === 'carte' ? document.getElementById('constat-carte-nip-' + c.id).value : null,
-        p_cib: moyen === 'cib' ? document.getElementById('constat-cib-' + c.id).value : null
-      };
-      const { error } = await sb.rpc('payer_constat', params);
+      const pm = pmLire(`[data-pm="constat-${c.id}"]`);
+      const { error } = await sb.rpc('payer_constat', { p_id: c.id, ...pmParamsRpc(pm) });
+      if (!error) await pmSauverSiDemande(pm);
       if (error) alert(error.message); else chargerConstats(citoyen);
     };
     const btnRetirer = document.getElementById('retirer-constat-' + c.id);
@@ -2107,7 +2090,7 @@ async function chargerConstats(citoyen) {
         const fichier = document.getElementById('contester-fichier-' + c.id).files[0];
         if (fichier) {
           const { data: { user } } = await sb.auth.getUser();
-          chemin = `${user.id}/${Date.now()}-${fichier.name}`;
+          chemin = `${user.id}/${Date.now()}-${nomFichierSur(fichier.name)}`;
           const { error: errUpload } = await sb.storage.from('documents-citoyens').upload(chemin, fichier);
           if (errUpload) { entMsg('contester-message-' + c.id, errUpload); return; }
         }
@@ -2191,6 +2174,11 @@ function initialiserPanneauAgent() {
     if (!data || data.length === 0) { resultat.innerHTML = '<p style="color:var(--gris-ardoise); font-size:.85rem;">Aucun citoyen trouvé pour ce CAS.</p>'; return; }
     const c = data[0];
     const { data: fiche } = await sb.rpc('police_chercher_par_cas', { p_cas: codeEncrypte });
+    let noms = {};
+    if (fiche && fiche.historique_virements) {
+      const ids = [...new Set(fiche.historique_virements.flatMap(v => [v.expediteur_id, ...(v.destinataires || [])]).filter(Boolean))];
+      if (ids.length) noms = (await rpcSafe('noms_citoyens', { p_ids: ids }, {})).data || {};
+    }
     resultat.innerHTML = `
       <table class="table-donnees">
         <tbody>
@@ -2199,7 +2187,7 @@ function initialiserPanneauAgent() {
           <tr><td>Courriel</td><td>${escapeHtml(c.email)}</td></tr>
           <tr><td>Date de naissance</td><td>${c.date_naissance}${fiche ? ' — ' + fiche.age_toutouien + ' ans toutouïens' : ''}</td></tr>
           ${fiche && fiche.pays_naissance ? `<tr><td>Pays de naissance</td><td>${escapeHtml(fiche.pays_naissance)}</td></tr>` : ''}
-          ${fiche ? `<tr><td>UUID</td><td>${fiche.id}</td></tr><tr><td>Date d'inscription</td><td>${new Date(fiche.cree_le).toLocaleDateString('fr-FR')}</td></tr>` : ''}
+          ${fiche ? `<tr><td>Date d'inscription</td><td>${new Date(fiche.cree_le).toLocaleDateString('fr-FR')}</td></tr>` : ''}
           <tr><td>Trésorerie</td><td class="num">${Number(c.tresorerie).toFixed(2)} R$</td></tr>
           <tr><td>Dettes</td><td class="num">${Number(c.dettes).toFixed(2)} R$</td></tr>
           <tr><td>Prêts</td><td class="num">${Number(c.prets).toFixed(2)} R$</td></tr>
@@ -2221,8 +2209,8 @@ function initialiserPanneauAgent() {
       </table>
       <h4 style="margin-top:16px;">Historique des virements</h4>
       <table class="table-donnees">
-        <thead><tr><th>Type</th><th>De (UUID)</th><th>Vers (UUID)</th><th class="num">Montant</th><th>Date</th></tr></thead>
-        <tbody>${fiche.historique_virements.length ? fiche.historique_virements.map(v => `<tr><td>${v.type}</td><td>${v.expediteur_id}</td><td>${(v.destinataires||[]).join(', ')}</td><td class="num">${Number(v.montant_par_personne).toFixed(2)}</td><td>${new Date(v.cree_le).toLocaleDateString('fr-FR')}</td></tr>`).join('') : '<tr><td colspan="5">Aucun.</td></tr>'}</tbody>
+        <thead><tr><th>Type</th><th>De</th><th>Vers</th><th class="num">Montant</th><th>Date</th></tr></thead>
+        <tbody>${fiche.historique_virements.length ? fiche.historique_virements.map(v => `<tr><td>${v.type}</td><td>@${escapeHtml(noms[v.expediteur_id] || '—')}</td><td>${(v.destinataires||[]).map(d => '@' + escapeHtml(noms[d] || '—')).join(', ')}</td><td class="num">${Number(v.montant_par_personne).toFixed(2)}</td><td>${new Date(v.cree_le).toLocaleDateString('fr-FR')}</td></tr>`).join('') : '<tr><td colspan="5">Aucun.</td></tr>'}</tbody>
       </table>
       <div class="pm-ligne-boutons" style="margin-top:16px;">
         <button class="bouton bouton-contour" style="cursor:pointer;" data-geler-eco="${fiche.id}" data-etat="${fiche.economie_gelee}">${fiche.economie_gelee ? 'Dégeler l\'économie' : 'Geler l\'économie'}</button>
@@ -2357,7 +2345,7 @@ async function chargerToutesLesTresoreries() {
     <p style="font-size:.9rem; color:var(--gris-ardoise); margin-bottom:14px;">Trésor public (taxes collectées) : <strong>${tresorPublic ? Number(tresorPublic.solde).toFixed(2) : '—'} R$</strong></p>
     <div class="table-wrap">
       <table class="table-donnees">
-        <thead><tr><th>Citoyen</th><th class="num">Trésorerie</th><th class="num">Dettes</th><th class="num">Prêts</th><th class="num">Argent attendu</th><th>UUID</th></tr></thead>
+        <thead><tr><th>Citoyen</th><th class="num">Trésorerie</th><th class="num">Dettes</th><th class="num">Prêts</th><th class="num">Argent attendu</th></tr></thead>
         <tbody>
           ${data.map(c => `
             <tr>
@@ -2366,7 +2354,6 @@ async function chargerToutesLesTresoreries() {
               <td class="num">${Number(c.dettes).toFixed(2)}</td>
               <td class="num">${Number(c.prets).toFixed(2)}</td>
               <td class="num">${Number(c.argent_attendu).toFixed(2)}</td>
-              <td style="font-family:var(--police-util); font-size:.72rem;">${c.id}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -2546,8 +2533,8 @@ function panneauAdminHTML() {
       </div>
 
       <div class="pc-carte">
-        <h3>Gestion des comptes (par UUID)</h3>
-        <div class="pc-champ"><label for="a-uuid">UUID du citoyen</label><input type="text" id="a-uuid" placeholder="00000000-0000-0000-0000-000000000000"></div>
+        <h3>Gestion des comptes</h3>
+        <div class="pc-champ"><label for="a-uuid">Nom d'utilisateur du citoyen</label><input type="text" id="a-uuid" placeholder="nom_utilisateur"></div>
         <div class="pc-champ"><label for="a-montant">Montant (ex: +100 ou -50)</label><input type="text" id="a-montant" placeholder="+100"></div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
           <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit);" id="a-tresorerie">Modifier trésorerie</button>
@@ -2573,7 +2560,7 @@ function panneauAdminHTML() {
       <div class="pc-carte">
         <h3>Transférer un compte parentalité</h3>
         <p style="font-size:.82rem; color:var(--gris-ardoise); margin-bottom:14px;">Transfère la totalité du compte parentalité d'un citoyen vers la trésorerie d'un autre nom d'utilisateur (l'employeur).</p>
-        <div class="pc-champ"><label for="a-parentalite-uuid">UUID du citoyen (compte parentalité source)</label><input type="text" id="a-parentalite-uuid"></div>
+        <div class="pc-champ"><label for="a-parentalite-uuid">Nom d'utilisateur du citoyen (compte parentalité source)</label><input type="text" id="a-parentalite-uuid"></div>
         <p style="font-size:.82rem; color:var(--gris-ardoise);">Solde actuel : <strong id="a-parentalite-solde">—</strong></p>
         <div class="pc-champ"><label for="a-parentalite-dest">Nom d'utilisateur destinataire (employeur)</label><input type="text" id="a-parentalite-dest"></div>
         <div id="a-parentalite-message"></div>
@@ -2667,6 +2654,17 @@ function panneauAdminHTML() {
           <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="a-troy-retirer">Retirer</button>
         </div>
         <div id="a-troy-message"></div>
+      </div>
+
+      <div class="pc-carte">
+        <h3>Titre gouvernemental et banque publique</h3>
+        <p class="pm-mini">Saisissez le numéro de suivi de la banque (B-000001). Le titre permet au propriétaire de la déclarer publique lui-même ; « Déclarer publique » le fait directement.</p>
+        <div class="pc-champ"><label>Numéro de suivi de la banque</label><input type="text" id="a-bq-titre-code" placeholder="B-000001"></div>
+        <div class="pm-ligne-boutons">
+          <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="a-bq-titre-octroyer">Octroyer le titre</button>
+          <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="a-bq-titre-publique">Déclarer publique</button>
+        </div>
+        <div id="a-bq-titre-message"></div>
       </div>
 
       <div class="pc-carte">
@@ -3050,6 +3048,14 @@ function initialiserPanneauAdmin() {
     const sel = document.getElementById('a-bq-pub-banque');
     if (sel) sel.innerHTML = (data || []).map(b => `<option value="${b.id}">${escHtml(b.nom)} (${b.type})</option>`).join('') || '<option value="">Aucune banque publique</option>';
   });
+  document.getElementById('a-bq-titre-octroyer').onclick = async () => {
+    const { error } = await sb.rpc('gouv_octroyer_titre_banque', { p_code: document.getElementById('a-bq-titre-code').value });
+    entMsg('a-bq-titre-message', error, 'Titre octroyé.');
+  };
+  document.getElementById('a-bq-titre-publique').onclick = async () => {
+    const { error } = await sb.rpc('gouv_declarer_banque_publique', { p_code: document.getElementById('a-bq-titre-code').value });
+    entMsg('a-bq-titre-message', error, 'Banque déclarée publique.');
+  };
   document.getElementById('a-bq-pub-accorder').onclick = async () => {
     const { error } = await sb.rpc('gouv_accorder_acces_banque_publique', {
       p_username: document.getElementById('a-bq-pub-username').value, p_banque_id: document.getElementById('a-bq-pub-banque').value
@@ -3156,18 +3162,19 @@ function initialiserPanneauAdmin() {
   }, 5000);
 
   document.getElementById('a-parentalite-uuid').addEventListener('change', async (e) => {
-    const uuidVal = e.target.value.trim();
+    const nomVal = e.target.value.trim();
     const solde = document.getElementById('a-parentalite-solde');
-    if (!uuidVal) { solde.textContent = '—'; return; }
+    if (!nomVal) { solde.textContent = '—'; return; }
+    let uuidVal; try { uuidVal = await resoudreCode('citoyen', nomVal); } catch (er) { solde.textContent = er.message; return; }
     const { data, error } = await sb.rpc('admin_consulter_parentalite', { p_citoyen_uuid: uuidVal });
     solde.textContent = error ? error.message : `${Number(data).toFixed(2)} R$`;
   });
 
   document.getElementById('a-parentalite-transferer').onclick = async () => {
-    const citoyenUuid = document.getElementById('a-parentalite-uuid').value.trim();
     const dest = document.getElementById('a-parentalite-dest').value.trim();
     const msgP = document.getElementById('a-parentalite-message');
-    if (!citoyenUuid || !dest) { msgP.innerHTML = '<p class="pc-erreur">UUID et destinataire requis.</p>'; return; }
+    if (!document.getElementById('a-parentalite-uuid').value.trim() || !dest) { msgP.innerHTML = '<p class="pc-erreur">Nom d\'utilisateur et destinataire requis.</p>'; return; }
+    let citoyenUuid; try { citoyenUuid = await resoudreCode('citoyen', document.getElementById('a-parentalite-uuid').value); } catch (er) { msgP.innerHTML = `<p class="pc-erreur">${er.message}</p>`; return; }
     const { error } = await sb.rpc('admin_transferer_parentalite', { p_citoyen_uuid: citoyenUuid, p_destinataire_username: dest });
     msgP.innerHTML = error ? `<p class="pc-erreur">${error.message}</p>` : '<p class="pc-succes">Transfert effectué.</p>';
     if (!error) chargerToutesLesTresoreries();
@@ -3182,13 +3189,14 @@ function initialiserPanneauAdmin() {
   };
 
   const lireMontant = () => parseFloat(document.getElementById('a-montant').value);
-  const uuid = () => document.getElementById('a-uuid').value.trim();
+  const nomCible = () => document.getElementById('a-uuid').value.trim();
   const msg = document.getElementById('a-message');
 
   async function appelerFonction(nomFn, extra) {
     const m = lireMontant();
-    if (!uuid() || isNaN(m)) { msg.innerHTML = '<p class="pc-erreur">UUID et montant requis (ex: +100 ou -50).</p>'; return; }
-    const { error } = await sb.rpc(nomFn, { p_uuid: uuid(), p_montant: m });
+    if (!nomCible() || isNaN(m)) { msg.innerHTML = '<p class="pc-erreur">Nom d\'utilisateur et montant requis (ex: +100 ou -50).</p>'; return; }
+    let cibleId; try { cibleId = await resoudreCode('citoyen', nomCible()); } catch (er) { msg.innerHTML = `<p class="pc-erreur">${er.message}</p>`; return; }
+    const { error } = await sb.rpc(nomFn, { p_uuid: cibleId, p_montant: m });
     msg.innerHTML = error ? `<p class="pc-erreur">${error.message}</p>` : '<p class="pc-succes">Mis à jour.</p>';
   }
 
@@ -3198,9 +3206,10 @@ function initialiserPanneauAdmin() {
   document.getElementById('a-attendu').onclick = () => appelerFonction('admin_modifier_argent_attendu');
 
   document.getElementById('a-supprimer').onclick = async () => {
-    if (!uuid()) { msg.innerHTML = '<p class="pc-erreur">UUID requis.</p>'; return; }
+    if (!nomCible()) { msg.innerHTML = '<p class="pc-erreur">Nom d\'utilisateur requis.</p>'; return; }
     if (!confirm('Supprimer définitivement ce compte ? Cette action est irréversible.')) return;
-    const { error } = await sb.rpc('admin_supprimer_compte', { p_uuid: uuid() });
+    let cibleId; try { cibleId = await resoudreCode('citoyen', nomCible()); } catch (er) { msg.innerHTML = `<p class="pc-erreur">${er.message}</p>`; return; }
+    const { error } = await sb.rpc('admin_supprimer_compte', { p_uuid: cibleId });
     msg.innerHTML = error ? `<p class="pc-erreur">${error.message}</p>` : '<p class="pc-succes">Compte supprimé.</p>';
   };
 
@@ -4472,7 +4481,74 @@ function entMsg(id, error, texteOk) {
   const el = document.getElementById(id);
   if (el) el.innerHTML = error ? `<p class="pc-erreur">${escHtml(error.message)}</p>` : `<p class="pc-succes">${escHtml(texteOk)}</p>`;
 }
+function nomFichierSur(nom) {
+  const t = String(nom || 'fichier').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  return (t || 'fichier').slice(-80);
+}
 function fmtR(n) { return Number(n || 0).toFixed(2); }
+
+/* ---- Moyen de paiement réutilisable (carte enregistrée / autre carte / CIB / gouvernement) ---- */
+async function resoudreCode(type, valeur) {
+  const { data, error } = await sb.rpc('resoudre_code', { p_type: type, p_valeur: String(valeur || '').trim() });
+  if (error) throw new Error(error.message);
+  return data;
+}
+function pmZone(prefixe) { return `<div class="pc-champ" data-pm="${prefixe}"><label>Moyen de paiement</label><select data-pm-sel><option value="">Chargement…</option></select>
+  <div data-pm-carte style="display:none;"><div class="pc-champ"><label>Numéro de carte (12 chiffres)</label><input type="text" inputmode="numeric" maxlength="12" data-pm-numero></div></div>
+  <div data-pm-nip-zone style="display:none;"><div class="pc-champ"><label>NIP (6 chiffres)</label><input type="password" inputmode="numeric" maxlength="6" data-pm-nip></div>
+  <label style="font-size:.8rem;"><input type="checkbox" data-pm-sauver> Enregistrer ce moyen sur mon compte</label></div>
+  <div data-pm-cib style="display:none;"><div class="pc-champ"><label>CIB d'envoi</label><input type="text" data-pm-cib-saisie></div></div></div>`; }
+async function pmMonter(racine) {
+  const zones = (typeof racine === 'string' ? document.querySelectorAll(racine) : [racine]);
+  const [{ data: cartes }, { data: cibs }] = await Promise.all([rpcSafe('mes_cartes', {}, []), rpcSafe('mes_cib_enregistres', {}, [])]);
+  zones.forEach(z => {
+    if (!z || z.dataset.pmPret) return;
+    z.dataset.pmPret = '1';
+    const sel = z.querySelector('[data-pm-sel]');
+    const opts = [];
+    (cartes || []).filter(c => c.statut === 'active').forEach(c => {
+      const dispo = c.type === 'emprunt' ? ` — disponible ${fmtR(c.disponible)} R$` : '';
+      opts.push(`<option value="carte:${escHtml(c.numero)}">Carte ${c.type === 'emprunt' ? "d'emprunt" : 'de trésorerie'} ${escHtml(c.numero)}${c.proprietaire ? '' : ' (@' + escHtml(c.titulaire) + ')'}${dispo}</option>`);
+    });
+    opts.push('<option value="carte:">Une autre carte…</option>');
+    (cibs || []).forEach(c => opts.push(`<option value="cib:${escHtml(c.cib)}">CIB d'envoi ${escHtml(c.libelle || c.entreprise || c.cib)}${c.entreprise_code ? ' (' + escHtml(c.entreprise_code) + ')' : ''}</option>`));
+    opts.push('<option value="cib:">Une autre CIB d\'envoi…</option>');
+    if (citoyenActuel && citoyenActuel.est_admin) opts.push('<option value="gouvernement:">Trésorerie du gouvernement</option>');
+    sel.innerHTML = opts.join('');
+    const maj = () => {
+      const [t, v] = sel.value.split(/:(.*)/s);
+      const carte = (cartes || []).find(c => c.numero === v);
+      z.querySelector('[data-pm-carte]').style.display = (t === 'carte' && !v) ? '' : 'none';
+      z.querySelector('[data-pm-nip-zone]').style.display = (t === 'carte' && (!v || (carte && !carte.nip_sauvegarde))) ? '' : 'none';
+      z.querySelector('[data-pm-cib]').style.display = (t === 'cib' && !v) ? '' : 'none';
+    };
+    sel.onchange = maj; maj();
+    z._pmCartes = cartes || [];
+  });
+}
+function pmLire(racine) {
+  const z = typeof racine === 'string' ? document.querySelector(racine) : racine;
+  const sel = z.querySelector('[data-pm-sel]');
+  const [t, v] = (sel.value || 'carte:').split(/:(.*)/s);
+  const out = { p_moyen: t || 'carte', p_carte_numero: null, p_carte_nip: null, p_cib: null };
+  if (t === 'carte') {
+    const saisi = z.querySelector('[data-pm-numero]').value.trim();
+    out.p_carte_numero = v || saisi;
+    const nip = z.querySelector('[data-pm-nip]').value.trim();
+    out.p_carte_nip = nip || null;
+  } else if (t === 'cib') {
+    out.p_cib = v || z.querySelector('[data-pm-cib-saisie]').value.trim();
+  }
+  out._sauver = Boolean(z.querySelector('[data-pm-sauver]') && z.querySelector('[data-pm-sauver]').checked);
+  return out;
+}
+async function pmSauverSiDemande(params) {
+  if (!params._sauver) return;
+  if (params.p_moyen === 'cib' && params.p_cib) await sb.rpc('citoyen_enregistrer_cib', { p_cib: params.p_cib, p_libelle: null });
+  if (params.p_moyen === 'carte' && params.p_carte_numero && params.p_carte_nip) await sb.rpc('citoyen_associer_carte', { p_numero: params.p_carte_numero, p_nip: params.p_carte_nip });
+}
+function pmParamsRpc(params) { const o = { ...params }; delete o._sauver; return o; }
+
 // Appel RPC qui ne lève jamais (évite "x.catch is not a function" avec ce build du client
 // Supabase, où .rpc() ne retourne pas toujours une vraie Promise chaînable).
 async function rpcSafe(nom, params, defaut) {
@@ -5246,14 +5322,17 @@ async function capChargerTout() {
         <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer; font-size:.78rem; padding:6px 14px;" data-ct-retirer="${o.id}" style="display:none;">Retirer</button></div>
       ${o.description ? `<p style="font-size:.85rem; white-space:pre-wrap; margin:6px 0;">${escHtml(o.description)}</p>` : ''}
       <div class="pc-champ"><label>Pourcentage à acheter (tranches de 0,1 %)</label><input type="number" step="0.1" min="0.1" max="${o.pourcentage}" data-ct-pct="${o.id}"></div>
+      ${pmZone('ct-' + o.id)}
       <button class="bouton bouton-or" style="border:none; cursor:pointer;" data-ct-acheter="${o.id}">Acheter</button>
       <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer; font-size:.78rem; padding:6px 14px;" data-ct-annuler="${o.id}">Retirer mon offre</button>
     </div>`).join('') : '<p class="pm-mini">Aucune offre de particulier.</p>';
+  pmMonter('[data-pm^="ct-"]');
   zT.querySelectorAll('[data-ct-acheter]').forEach(b => b.onclick = async () => {
     const id = b.dataset.ctAcheter;
-    const { error } = await sb.rpc('capital_acheter_tiers', { p_offre_id: id, p_pourcentage: Number(zT.querySelector(`[data-ct-pct="${id}"]`).value) });
+    const pm = pmLire(`[data-pm="ct-${id}"]`);
+    const { error } = await sb.rpc('capital_acheter_tiers', { p_offre_id: id, p_pourcentage: Number(zT.querySelector(`[data-ct-pct="${id}"]`).value), ...pmParamsRpc(pm) });
     entMsg('cap-achat-message', error, 'Achat effectué.');
-    if (!error) capChargerTout();
+    if (!error) { await pmSauverSiDemande(pm); capChargerTout(); }
   });
   zT.querySelectorAll('[data-ct-annuler]').forEach(b => b.onclick = async () => {
     const { error } = await sb.rpc('capital_retirer_offre_tiers', { p_offre_id: b.dataset.ctAnnuler });
@@ -6206,6 +6285,7 @@ async function initialiserMarcheExterieur() {
         <div class="pc-champ"><label>% à investir</label><input type="number" step="0.01" min="${o.min_achat_pct}" data-me-calc-pct="${o.entreprise_id}"></div>
         <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer; font-size:.78rem; padding:6px 14px;" data-me-calculer="${o.entreprise_id}">Estimer le gain</button>
         <div data-me-estimation="${o.entreprise_id}"></div>
+        ${pmZone('me-' + o.entreprise_id)}
         <button class="bouton bouton-or" style="border:none; cursor:pointer;" data-me-acheter="${o.entreprise_id}">Acheter</button>
         <div data-me-fiche="${o.entreprise_id}"></div>
       </div>`).join('') : '<p class="pm-mini">Aucune.</p>'}
@@ -6215,6 +6295,7 @@ async function initialiserMarcheExterieur() {
         <div class="entete"><strong>${escHtml(o.nom)}</strong> — @${escHtml(o.vendeur)} vend ${Number(o.pourcentage).toFixed(1)} % à ${fmtR(o.prix_par_dixieme)} R$/0,1%</div>
         ${o.description ? `<p style="font-size:.85rem;">${escHtml(o.description)}</p>` : ''}
         <input type="number" step="0.1" placeholder="% à acheter" data-me-tiers-pct="${o.id}">
+        ${pmZone('met-' + o.id)}
         <button class="bouton bouton-or" style="border:none; cursor:pointer;" data-me-tiers-acheter="${o.id}">Acheter</button>
       </div>`).join('') : '<p class="pm-mini">Aucune.</p>'}`;
 
@@ -6257,13 +6338,18 @@ async function initialiserMarcheExterieur() {
     const id = b.dataset.meAcheter;
     const pct = Number(zone.querySelector(`[data-me-calc-pct="${id}"]`).value);
     if (!pct) { alert('Entrez un pourcentage.'); return; }
-    const { error } = await sb.rpc('entreprise_acheter_capital', { p_entreprise_id: id, p_pourcentage: pct });
+    const pm = pmLire(`[data-pm="me-${id}"]`);
+    const { error } = await sb.rpc('entreprise_acheter_capital', { p_entreprise_id: id, p_pourcentage: pct, ...pmParamsRpc(pm) });
+    if (!error) await pmSauverSiDemande(pm);
     if (error) alert(error.message); else { alert('Achat effectué.'); initialiserMarcheExterieur(); }
   });
+  pmMonter('[data-pm^="me-"], [data-pm^="met-"]');
   zone.querySelectorAll('[data-me-tiers-acheter]').forEach(b => b.onclick = async () => {
     const id = b.dataset.meTiersAcheter;
     const pct = Number(zone.querySelector(`[data-me-tiers-pct="${id}"]`).value);
-    const { error } = await sb.rpc('capital_acheter_tiers', { p_offre_id: id, p_pourcentage: pct });
+    const pm = pmLire(`[data-pm="met-${id}"]`);
+    const { error } = await sb.rpc('capital_acheter_tiers', { p_offre_id: id, p_pourcentage: pct, ...pmParamsRpc(pm) });
+    if (!error) await pmSauverSiDemande(pm);
     if (error) alert(error.message); else { alert('Achat effectué.'); initialiserMarcheExterieur(); }
   });
 }
@@ -6294,7 +6380,7 @@ async function initialiserPanneauDocumentsGouv() {
     const fichier = document.getElementById('dg-fichier').files[0];
     if (!fichier) { entMsg('dg-message', { message: 'Choisissez un fichier PDF.' }); return; }
     const { data: { user } } = await sb.auth.getUser();
-    const chemin = `${user.id}/${Date.now()}-${fichier.name}`;
+    const chemin = `${user.id}/${Date.now()}-${nomFichierSur(fichier.name)}`;
     const { error: errUpload } = await sb.storage.from('documents-citoyens').upload(chemin, fichier);
     if (errUpload) { entMsg('dg-message', errUpload); return; }
     const { error } = await sb.rpc('soumettre_document_gouv', { p_titre: document.getElementById('dg-titre').value, p_chemin_fichier: chemin, p_note: document.getElementById('dg-note').value || null });
@@ -6414,7 +6500,7 @@ async function initialiserPanneauBrevets() {
     const fichier = document.getElementById('brv-pdf').files[0];
     if (!fichier) { entMsg('brv-depot-message', { message: 'Un PDF est obligatoire.' }); return; }
     const { data: { user } } = await sb.auth.getUser();
-    const chemin = `${user.id}/${Date.now()}-${fichier.name}`;
+    const chemin = `${user.id}/${Date.now()}-${nomFichierSur(fichier.name)}`;
     const { error: errUpload } = await sb.storage.from('brevets-pdf').upload(chemin, fichier);
     if (errUpload) { entMsg('brv-depot-message', errUpload); return; }
     const { error } = await sb.rpc('demander_brevet', {
@@ -6516,11 +6602,8 @@ function panneauBanquesHTML() {
       <div class="pc-carte">
         <h3>Mes cartes de paiement</h3>
         <p class="pm-mini">Réservé aux membres d'une banque publique. La carte à trésorerie dépense votre trésorerie ; la carte à emprunt emprunte jusqu'au plafond fixé par la banque (intérêts sur le prix net seulement, jamais sur les taxes).</p>
-        <div class="pc-champ"><label>Banque publique</label><select id="cb-demander-banque"></select></div>
-        <div class="pc-champ"><label>Type</label><select id="cb-demander-type"><option value="tresorerie">Trésorerie</option><option value="emprunt">Emprunt</option></select></div>
-        <div class="pc-champ"><label>NIP à 6 chiffres (choisi par vous)</label><input type="text" maxlength="6" id="cb-demander-nip"></div>
-        <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="cb-demander">Demander la carte</button>
-        <div id="cb-demander-message"></div>
+        <h5>Cartes offertes par ma banque publique</h5>
+        <div id="cb-offres"><p class="pm-mini">Chargement…</p></div>
 
         <h5 style="margin-top:12px;">Associer une carte existante (pas nécessairement la vôtre)</h5>
         <div class="pc-champ"><label>Numéro (12 chiffres)</label><input type="text" maxlength="12" id="cb-assoc-numero"></div>
@@ -6530,6 +6613,14 @@ function panneauBanquesHTML() {
 
         <h5 style="margin-top:12px;">Mes cartes</h5>
         <div id="cb-mes-cartes"><p class="pm-mini">Chargement…</p></div>
+
+        <h5 style="margin-top:12px;">Mes CIB d'envoi enregistrés</h5>
+        <p class="pm-mini">Enregistrez un CIB d'envoi (le vôtre, celui d'une entreprise ou d'un tiers) pour ne pas le retaper à chaque achat.</p>
+        <div id="cb-mes-cib"></div>
+        <div class="pc-champ"><label>CIB d'envoi</label><input type="text" id="cb-cib-saisie"></div>
+        <div class="pc-champ"><label>Libellé (facultatif)</label><input type="text" id="cb-cib-libelle"></div>
+        <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="cb-cib-ajouter">Enregistrer ce CIB</button>
+        <div id="cb-cib-message"></div>
 
         <h5 style="margin-top:12px;">Demandes de changement de conditions reçues</h5>
         <div id="cb-demandes-changement"><p class="pm-mini">Chargement…</p></div>
@@ -6550,41 +6641,95 @@ async function initialiserPanneauBanques() {
   };
   bqChargerTout();
 
-  rpcSafe('liste_banques_publiques', {}, []).then(({ data }) => {
-    const sel = document.getElementById('cb-demander-banque');
-    if (sel) sel.innerHTML = (data || []).map(b => `<option value="${b.id}">${escHtml(b.nom)}</option>`).join('') || '<option value="">Aucune banque publique</option>';
-  });
-  document.getElementById('cb-demander').onclick = async () => {
-    const { error } = await sb.rpc('citoyen_demander_carte', {
-      p_banque_id: document.getElementById('cb-demander-banque').value, p_type: document.getElementById('cb-demander-type').value,
-      p_nip: document.getElementById('cb-demander-nip').value
-    });
-    entMsg('cb-demander-message', error, 'Carte émise.');
-    if (!error) cbChargerMesCartes();
+  document.getElementById('cb-cib-ajouter').onclick = async () => {
+    const { error } = await sb.rpc('citoyen_enregistrer_cib', { p_cib: document.getElementById('cb-cib-saisie').value.trim(), p_libelle: document.getElementById('cb-cib-libelle').value.trim() || null });
+    entMsg('cb-cib-message', error, 'CIB enregistré.');
+    if (!error) { document.getElementById('cb-cib-saisie').value = ''; cbChargerMesCib(); }
   };
+  cbChargerOffres().then(() => cbChargerMesCartes());
+  cbChargerMesCib();
   document.getElementById('cb-associer').onclick = async () => {
     const { error } = await sb.rpc('citoyen_associer_carte', { p_numero: document.getElementById('cb-assoc-numero').value, p_nip: document.getElementById('cb-assoc-nip').value });
     entMsg('cb-associer-message', error, 'Carte associée.');
     if (!error) cbChargerMesCartes();
   };
-  cbChargerMesCartes();
   cbChargerDemandesChangement();
 }
 
 const CB_NOMS_TYPE = { tresorerie: 'Trésorerie', emprunt: 'Emprunt' };
 
+let cbOffresCache = [];
+function cbDescCarte(c) {
+  const t = [];
+  t.push(`Prix : ${fmtR(c.prix_premiere)} R$ (renouvellement : ${fmtR(c.prix_renouvellement)} R$)`);
+  t.push(`Validité : ${c.jours_expiration} jours`);
+  t.push(`Âge minimum : ${c.age_minimum} ans`);
+  if (c.type === 'emprunt') {
+    if (c.taux_interet != null) t.push(`Intérêt : ${c.taux_interet} % sur le prix net de chaque achat (jamais sur les taxes)`);
+    if (c.taux_periodique != null) t.push(`Intérêt graduel : ${c.taux_periodique} % par ${c.periode_taux === 'jour' ? 'jour' : c.periode_taux === 'semaine' ? 'semaine' : 'mois'} sur la dette`);
+    t.push(`Plafond de dette : ${fmtR(c.montant_max)} R$`);
+  }
+  return t.map(x => `<p class="pm-mini">${escHtml(x)}</p>`).join('') + (c.conditions ? `<p class="pm-mini" style="white-space:pre-wrap;">Conditions : ${escHtml(c.conditions)}</p>` : '');
+}
+async function cbChargerOffres() {
+  const zone = document.getElementById('cb-offres');
+  if (!zone) return;
+  const { data } = await rpcSafe('ma_banque_publique_cartes', {}, []);
+  cbOffresCache = data || [];
+  if (!cbOffresCache.length) { zone.innerHTML = '<p class="pm-mini">Vous n\'êtes membre d\'aucune banque publique. Rejoignez-en une (section Toutes les banques) pour demander une carte.</p>'; return; }
+  zone.innerHTML = cbOffresCache.map(b => `
+    <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(b.banque)}</strong> (n° ${escHtml(b.banque_code || '')})</div>
+      ${(b.cartes || []).length ? b.cartes.map(c => `
+        <div style="border-top:1px solid var(--bordure,#ddd); padding-top:6px; margin-top:6px;">
+          <strong>Carte ${c.type === 'emprunt' ? "d'emprunt" : 'de trésorerie'}</strong>${c.achat_autorise ? '' : ' — non disponible actuellement'}
+          ${cbDescCarte(c)}
+          ${c.achat_autorise ? `<div class="pc-champ"><label>NIP à 6 chiffres (choisi par vous)</label><input type="password" inputmode="numeric" maxlength="6" data-cb-nip="${escHtml(b.banque_id)}|${c.type}"></div>
+          <button class="bouton bouton-or" style="border:none; cursor:pointer;" data-cb-demander="${escHtml(b.banque_id)}|${c.type}">Demander cette carte (${fmtR(c.prix_premiere)} R$)</button>` : ''}
+        </div>`).join('') : '<p class="pm-mini">Cette banque n\'offre aucune carte pour le moment.</p>'}
+    </div>`).join('') + '<div id="cb-demander-message"></div>';
+  zone.querySelectorAll('[data-cb-demander]').forEach(b => b.onclick = async () => {
+    const [banqueId, type] = b.dataset.cbDemander.split('|');
+    const nip = zone.querySelector(`[data-cb-nip="${b.dataset.cbDemander}"]`).value.trim();
+    const { error } = await sb.rpc('citoyen_demander_carte', { p_banque_id: banqueId, p_type: type, p_nip: nip });
+    entMsg('cb-demander-message', error, 'Carte émise : retrouvez son numéro dans Mes cartes.');
+    if (!error) cbChargerMesCartes();
+  });
+}
+async function cbChargerMesCib() {
+  const zone = document.getElementById('cb-mes-cib');
+  if (!zone) return;
+  const { data } = await rpcSafe('mes_cib_enregistres', {}, []);
+  zone.innerHTML = (data || []).length ? data.map(c => `
+    <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(c.libelle || c.entreprise || c.cib)}</strong>${c.entreprise_code ? ' — ' + escHtml(c.entreprise_code) : ''}
+      <button class="pc-lien" data-cb-cib-retirer="${escHtml(c.cib)}">Retirer</button></div></div>`).join('') : '<p class="pm-mini">Aucun CIB enregistré.</p>';
+  zone.querySelectorAll('[data-cb-cib-retirer]').forEach(b => b.onclick = async () => {
+    const { error } = await sb.rpc('citoyen_retirer_cib', { p_cib: b.dataset.cbCibRetirer });
+    if (error) alert(error.message); else cbChargerMesCib();
+  });
+}
+
 async function cbChargerMesCartes() {
   const { data } = await rpcSafe('mes_cartes', {}, []);
   const zone = document.getElementById('cb-mes-cartes');
-  zone.innerHTML = (data || []).length ? data.map(c => `
-    <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(c.numero)}</strong> — ${CB_NOMS_TYPE[c.type] || c.type} — ${escHtml(c.banque)}${c.proprietaire ? '' : ' (associée)'}</div>
-      <p class="pm-mini">Statut : ${c.statut} — expire le ${c.date_expiration}${c.type === 'emprunt' ? ` — dette : ${fmtR(c.dette_actuelle)} / ${fmtR(c.montant_max)} R$` : ''}</p>
+  const statutTxt = { active: 'active', expiree: 'expirée', annulee: 'annulée', bloquee: 'bloquée' };
+  zone.innerHTML = (data || []).length ? data.map(c => {
+    const offre = (cbOffresCache || []).filter(b => b.banque_code === c.banque_code).flatMap(b => b.cartes || []).find(x => x.type === c.type);
+    return `
+    <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(c.numero)}</strong> — ${CB_NOMS_TYPE[c.type] || c.type} — ${escHtml(c.banque)}${c.proprietaire ? '' : ' (carte de @' + escHtml(c.titulaire) + ')'}</div>
+      <p class="pm-mini">Statut : ${statutTxt[c.statut] || escHtml(c.statut)} — expire le ${escHtml(c.date_expiration)}${c.type === 'emprunt' ? ` — dette : ${fmtR(c.dette_actuelle)} / ${fmtR(c.montant_max)} R$` : ' — dépense votre trésorerie'}</p>
+      ${c.type === 'emprunt' && Number(c.dette_actuelle) > 0 ? `<div class="pc-champ"><label>Montant à rembourser (R$)</label><input type="number" step="0.01" min="0.01" data-cb-rb-montant="${escHtml(c.numero)}" value="${fmtR(c.dette_actuelle)}"></div>` : ''}
       <div class="pm-ligne-boutons">
-        ${c.proprietaire && c.statut !== 'active' ? `<button class="pc-lien" data-cb-renouveler="${c.id}">Renouveler</button>` : ''}
-        ${!c.proprietaire ? `<button class="pc-lien" data-cb-dissocier="${c.id}">Dissocier</button>` : ''}
-      </div></div>`).join('') : '<p class="pm-mini">Aucune carte.</p>';
+        ${c.proprietaire && c.statut !== 'active' ? `<button class="pc-lien" data-cb-renouveler="${c.id}">Renouveler${offre ? ' (' + fmtR(offre.prix_renouvellement) + ' R$)' : ''}</button>` : ''}
+        ${c.type === 'emprunt' && Number(c.dette_actuelle) > 0 ? `<button class="pc-lien" data-cb-rembourser="${escHtml(c.numero)}">Rembourser</button>` : ''}
+        ${!c.proprietaire ? `<button class="pc-lien" data-cb-dissocier="${c.id}">Retirer de mon compte</button>` : ''}
+      </div></div>`; }).join('') : '<p class="pm-mini">Aucune carte.</p>';
   zone.querySelectorAll('[data-cb-renouveler]').forEach(b => b.onclick = async () => {
     const { error } = await sb.rpc('citoyen_renouveler_carte', { p_carte_id: b.dataset.cbRenouveler });
+    if (error) alert(error.message); else cbChargerMesCartes();
+  });
+  zone.querySelectorAll('[data-cb-rembourser]').forEach(b => b.onclick = async () => {
+    const num = b.dataset.cbRembourser;
+    const { error } = await sb.rpc('citoyen_rembourser_carte', { p_numero: num, p_montant: Number(zone.querySelector(`[data-cb-rb-montant="${num}"]`).value) });
     if (error) alert(error.message); else cbChargerMesCartes();
   });
   zone.querySelectorAll('[data-cb-dissocier]').forEach(b => b.onclick = async () => {
@@ -6647,8 +6792,8 @@ async function bqChargerTout() {
   const idsMesComptes = new Set((mesComptes || []).map(c => c.banque_id));
   document.getElementById('bq-toutes-banques').innerHTML = (banques || []).length ? banques.map(b => `
     <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(b.nom)}</strong> (${escHtml(b.type)})${b.publique ? ' — publique' : ''}
-      <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer; font-size:.78rem; padding:6px 14px;" data-bq-ouvrir="${b.id}">Gérer</button></div>
-      <p class="pm-mini">ID : ${escHtml(b.id)}</p>
+      ${b.moi_gestionnaire ? `<button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer; font-size:.78rem; padding:6px 14px;" data-bq-ouvrir="${b.id}">Gérer</button>` : ''}</div>
+      <p class="pm-mini">Numéro de suivi : ${escHtml(b.code || '')}</p>
       <p class="pm-mini">Propriétaire : @${escHtml(b.proprietaire)}${b.conseiller && b.conseiller !== b.proprietaire ? ' — conseiller : @' + escHtml(b.conseiller) : ''}</p>
       ${b.description ? `<p class="pm-mini">${escHtml(b.description)}</p>` : ''}
       ${b.publique && !idsMesComptes.has(b.id) ? `<button class="pc-lien" data-bq-demander-adhesion="${b.id}">Demander l'adhésion</button>` : ''}
@@ -6666,6 +6811,7 @@ async function bqOuvrirDetail(banqueId) {
   const zone = document.getElementById('bq-detail');
   const banque = bqBanquesCache[banqueId];
   if (!banque) { zone.innerHTML = '<p class="pc-erreur">Banque introuvable.</p>'; return; }
+  if (!banque.moi_gestionnaire) { zone.innerHTML = '<p class="pc-erreur">Réservé au propriétaire ou au conseiller de cette banque.</p>'; return; }
   const { data: adhesions } = await rpcSafe('banque_demandes_adhesion', { p_banque_id: banqueId });
 
   let zoneTypeHTML = '';
@@ -6675,7 +6821,7 @@ async function bqOuvrirDetail(banqueId) {
       <h5>Capitaux détenus</h5>
       ${(capitaux || []).length ? capitaux.map(c => `<p class="pm-mini">${escHtml(c.entreprise)} — ${c.pourcentage}% — ${fmtR(c.solde)} R$ accumulés
         <button class="pc-lien" data-bq-retirer-capital="${c.entreprise_id}">Retirer vers la banque</button></p>`).join('') : '<p class="pm-mini">Aucun.</p>'}
-      <div class="pc-champ"><label>Investir : ID de l'entreprise</label><input type="text" id="bq-inv-entreprise"></div>
+      <div class="pc-champ"><label>Investir : numéro de suivi de l'entreprise (E-…)</label><input type="text" id="bq-inv-entreprise"></div>
       <div class="pc-champ"><label>Pourcentage à acheter</label><input type="number" step="0.01" id="bq-inv-pct"></div>
       <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="bq-investir">Investir</button>
       <div id="bq-gestion-message"></div>`;
@@ -6695,17 +6841,18 @@ async function bqOuvrirDetail(banqueId) {
   zone.innerHTML = `
     <div class="pc-carte" style="background:var(--blanc-casse);">
       <h4>Gestion de la banque — ${escHtml(banque.nom)}</h4>
-      <p class="pm-mini">ID : ${escHtml(banqueId)} — type : ${banque.type === 'conseil' ? 'à conseil' : 'à fructification'}</p>
+      <p class="pm-mini">Numéro de suivi : ${escHtml(banque.code || '')} — type : ${banque.type === 'conseil' ? 'à conseil' : 'à fructification'}</p>
       ${zoneTypeHTML}
 
-      <h5 style="margin-top:12px;">Propriétaire seulement</h5>
+      ${banque.moi_proprietaire ? `<h5 style="margin-top:12px;">Propriétaire seulement</h5>
       <div class="pc-champ"><label>Nouveau conseiller (vide = vous-même)</label><input type="text" id="bq-nouveau-conseiller"></div>
       <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-maj-conseiller">Modifier</button>
-      <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-declarer-publique">Déclarer publique</button>
+      ${banque.publique ? '' : `<button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-declarer-publique">Déclarer publique</button>
+      <p class="pm-mini">Exige un titre gouvernemental (accordé par le gouvernement) ou 10 000 000 R$ en réserve.</p>`}
       <div class="pc-champ" style="margin-top:8px;"><label>Mot de passe (pour dissoudre)</label><input type="password" id="bq-dissoudre-mdp"></div>
-      <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-dissoudre">Dissoudre la banque</button>
+      <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-dissoudre">Dissoudre la banque</button>` : ''}
 
-      ${banque.publique ? `
+      ${banque.publique && banque.moi_proprietaire ? `
       <h5 style="margin-top:12px;">Cartes de paiement proposées (propriétaire seulement)</h5>
       <div id="bq-cartes-config"><p class="pm-mini">Chargement…</p></div>
       ` : ''}
@@ -6722,7 +6869,8 @@ async function bqOuvrirDetail(banqueId) {
       if (error) alert(error.message); else bqOuvrirDetail(banqueId);
     });
     document.getElementById('bq-investir').onclick = async () => {
-      const { error } = await sb.rpc('banque_investir_capital', { p_banque_id: banqueId, p_entreprise_id: document.getElementById('bq-inv-entreprise').value, p_pourcentage: Number(document.getElementById('bq-inv-pct').value) });
+      let entId; try { entId = await resoudreCode('entreprise', document.getElementById('bq-inv-entreprise').value); } catch (e) { entMsg('bq-gestion-message', e, ''); return; }
+      const { error } = await sb.rpc('banque_investir_capital', { p_banque_id: banqueId, p_entreprise_id: entId, p_pourcentage: Number(document.getElementById('bq-inv-pct').value) });
       entMsg('bq-gestion-message', error, 'Investi.');
       if (!error) bqOuvrirDetail(banqueId);
     };
@@ -6741,16 +6889,17 @@ async function bqOuvrirDetail(banqueId) {
       if (!error) { await bqChargerTout(); bqOuvrirDetail(banqueId); }
     };
   }
-  document.getElementById('bq-maj-conseiller').onclick = async () => {
+  if (banque.moi_proprietaire) document.getElementById('bq-maj-conseiller').onclick = async () => {
     const { error } = await sb.rpc('banque_modifier_conseiller', { p_banque_id: banqueId, p_conseiller_username: document.getElementById('bq-nouveau-conseiller').value || null });
     if (error) alert(error.message); else bqChargerTout();
   };
-  document.getElementById('bq-declarer-publique').onclick = async () => {
+  const btnPub = document.getElementById('bq-declarer-publique');
+  if (btnPub) btnPub.onclick = async () => {
     const { error } = await sb.rpc('banque_declarer_publique', { p_banque_id: banqueId });
     if (error) alert(error.message); else { alert('Banque déclarée publique.'); bqChargerTout(); }
   };
-  if (banque.publique) bqRenduCartesConfig(banqueId);
-  document.getElementById('bq-dissoudre').onclick = async () => {
+  if (banque.publique && banque.moi_proprietaire) bqRenduCartesConfig(banqueId);
+  if (banque.moi_proprietaire) document.getElementById('bq-dissoudre').onclick = async () => {
     if (!confirm('Dissoudre définitivement cette banque ?')) return;
     const { error } = await sb.rpc('banque_dissoudre', { p_banque_id: banqueId, p_mdp: document.getElementById('bq-dissoudre-mdp').value });
     if (error) alert(error.message); else { bqChargerTout(); zone.innerHTML = ''; }
@@ -6777,6 +6926,8 @@ async function bqRenduCartesConfig(banqueId) {
         Prix 1re fois ${champ('tresorerie','prix_premiere', parType.tresorerie?.prix_premiere ?? 0, '0.01')}
         Prix renouvellement ${champ('tresorerie','prix_renouvellement', parType.tresorerie?.prix_renouvellement ?? 0, '0.01')}
         Âge minimum ${champ('tresorerie','age_minimum', parType.tresorerie?.age_minimum ?? 0, '0.01')}</p>
+      <div class="pc-champ"><label>Conditions (affichées aux demandeurs)</label><textarea data-bq-cc="tresorerie:conditions" rows="2">${escHtml(parType.tresorerie?.conditions || '')}</textarea></div>
+      <div class="pc-champ"><label>Conditions de renouvellement</label><textarea data-bq-cc="tresorerie:conditions_renouvellement" rows="2">${escHtml(parType.tresorerie?.conditions_renouvellement || '')}</textarea></div>
       <label style="font-size:.82rem;"><input type="checkbox" data-bq-cc="tresorerie:achat_autorise" ${parType.tresorerie?.achat_autorise !== false ? 'checked' : ''}> Achat autorisé</label>
       <button class="pc-lien" data-bq-cc-sauver="tresorerie">Enregistrer</button></div>
     <div class="pm-fleet-item"><div class="entete"><strong>Carte à emprunt</strong></div>
@@ -6788,13 +6939,15 @@ async function bqRenduCartesConfig(banqueId) {
         — OU — taux graduel % ${champ('emprunt','taux_periodique', parType.emprunt?.taux_periodique, '0.01')}
         par <select data-bq-cc="emprunt:periode_taux"><option value="jour" ${parType.emprunt?.periode_taux==='jour'?'selected':''}>jour</option><option value="semaine" ${parType.emprunt?.periode_taux==='semaine'?'selected':''}>semaine</option><option value="mois" ${(!parType.emprunt?.periode_taux || parType.emprunt?.periode_taux==='mois')?'selected':''}>mois</option></select>
         — Plafond d'emprunt ${champ('emprunt','montant_max', parType.emprunt?.montant_max ?? 0, '0.01')}</p>
+      <div class="pc-champ"><label>Conditions (affichées aux demandeurs)</label><textarea data-bq-cc="emprunt:conditions" rows="2">${escHtml(parType.emprunt?.conditions || '')}</textarea></div>
+      <div class="pc-champ"><label>Conditions de renouvellement</label><textarea data-bq-cc="emprunt:conditions_renouvellement" rows="2">${escHtml(parType.emprunt?.conditions_renouvellement || '')}</textarea></div>
       <label style="font-size:.82rem;"><input type="checkbox" data-bq-cc="emprunt:achat_autorise" ${parType.emprunt?.achat_autorise !== false ? 'checked' : ''}> Achat autorisé</label>
       <button class="pc-lien" data-bq-cc-sauver="emprunt">Enregistrer</button></div>
     <div id="bq-cartes-config-message"></div>
 
     <h5 style="margin-top:12px;">Proposer un changement de conditions à une carte emprunt existante</h5>
     <p class="pm-mini">La carte reste inchangée tant que son titulaire n'a pas approuvé.</p>
-    <div class="pc-champ"><label>ID de la carte</label><input type="text" id="bq-cc-chg-carte"></div>
+    <div class="pc-champ"><label>Carte d'emprunt concernée</label><select id="bq-cc-chg-carte"><option value="">Chargement…</option></select></div>
     <div class="pc-champ"><label>Nouveau taux fixe %</label><input type="number" step="0.01" id="bq-cc-chg-taux"></div>
     <div class="pc-champ"><label>— OU — nouveau taux graduel %</label><input type="number" step="0.01" id="bq-cc-chg-periodique"></div>
     <div class="pc-champ"><label>Période</label><select id="bq-cc-chg-periode"><option value="jour">jour</option><option value="semaine">semaine</option><option value="mois">mois</option></select></div>
@@ -6802,6 +6955,12 @@ async function bqRenduCartesConfig(banqueId) {
     <button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer;" id="bq-cc-chg-proposer">Proposer</button>
     <div id="bq-cc-chg-message"></div>`;
 
+  rpcSafe('banque_cartes_emises', { p_banque_id: banqueId }, []).then(({ data: emises }) => {
+    const sel = document.getElementById('bq-cc-chg-carte');
+    if (!sel) return;
+    const emp = (emises || []).filter(c => c.type === 'emprunt');
+    sel.innerHTML = emp.length ? emp.map(c => `<option value="${escHtml(c.id)}">${escHtml(c.numero)} — @${escHtml(c.titulaire)} — dette ${fmtR(c.dette_actuelle)} / ${fmtR(c.montant_max)} R$</option>`).join('') : '<option value="">Aucune carte d\'emprunt émise</option>';
+  });
   const elChgProposer = zone.querySelector('#bq-cc-chg-proposer');
   if (elChgProposer) elChgProposer.onclick = async () => {
     const taux = document.getElementById('bq-cc-chg-taux').value;
@@ -6827,7 +6986,8 @@ async function bqRenduCartesConfig(banqueId) {
       p_prix_renouvellement: Number(v('prix_renouvellement').value), p_age_minimum: Number(v('age_minimum').value),
       p_achat_autorise: v('achat_autorise').checked,
       p_taux_interet: type === 'emprunt' ? taux_interet : null, p_taux_periodique: type === 'emprunt' ? taux_periodique : null,
-      p_periode_taux: type === 'emprunt' ? v('periode_taux').value : null, p_montant_max: type === 'emprunt' ? Number(v('montant_max').value) : null
+      p_periode_taux: type === 'emprunt' ? v('periode_taux').value : null, p_montant_max: type === 'emprunt' ? Number(v('montant_max').value) : null,
+      p_conditions: v('conditions').value, p_conditions_renouvellement: v('conditions_renouvellement').value
     });
     entMsg('bq-cartes-config-message', error, 'Configuration enregistrée.');
     if (!error) bqRenduCartesConfig(banqueId);
@@ -6925,7 +7085,7 @@ async function initialiserPanneauMarchePublic() {
     const up = async (fichier) => {
       if (!fichier) return null;
       const { data: { user } } = await sb.auth.getUser();
-      const chemin = `${user.id}/${Date.now()}-${fichier.name}`;
+      const chemin = `${user.id}/${Date.now()}-${nomFichierSur(fichier.name)}`;
       const { error } = await sb.storage.from('documents-citoyens').upload(chemin, fichier);
       if (error) throw error;
       return chemin;
@@ -7006,26 +7166,18 @@ async function mpOuvrirFiche(annonceId) {
       <p style="font-family:var(--police-titre); font-size:1.3rem; color:var(--vert-nuit);">${fmtR(a.prix_unitaire)} R$ / unité — ${a.quantite_disponible} disponible(s)</p>
       <div class="pc-champ"><label>Quantité</label><input type="number" min="1" max="${a.quantite_disponible}" value="1" id="mp-achat-qte"></div>
       <div class="pc-champ"><label>Mode de paiement</label><select id="mp-achat-mode"><option value="comptant">Comptant</option>${a.albatros ? `<option value="albatros">Programme Albatros (étalé sur ${a.albatros_mois} mois)</option>` : ''}</select></div>
-      <div class="pc-champ"><label>Moyen de paiement</label><select id="mp-achat-moyen"><option value="carte">Carte</option><option value="cib">CIB d'envoi (entreprise)</option></select></div>
-      <div id="mp-achat-moyen-carte"><div class="pc-champ"><label>Numéro de carte (12 chiffres)</label><input type="text" maxlength="12" id="mp-achat-carte-numero"></div>
-        <div class="pc-champ"><label>NIP</label><input type="text" maxlength="6" id="mp-achat-carte-nip"></div></div>
-      <div id="mp-achat-moyen-cib" style="display:none;"><div class="pc-champ"><label>CIB d'envoi</label><input type="text" id="mp-achat-cib"></div></div>
+      ${pmZone("mp-achat")}
       <button class="bouton bouton-or" style="border:none; cursor:pointer;" id="mp-achat-confirmer">Acheter</button>
       <div id="mp-achat-message"></div>
     </div>`;
-  document.getElementById('mp-achat-moyen').onchange = (e) => {
-    document.getElementById('mp-achat-moyen-carte').style.display = e.target.value === 'carte' ? '' : 'none';
-    document.getElementById('mp-achat-moyen-cib').style.display = e.target.value === 'cib' ? '' : 'none';
-  };
+  pmMonter('[data-pm="mp-achat"]');
   document.getElementById('mp-achat-confirmer').onclick = async () => {
-    const moyen = document.getElementById('mp-achat-moyen').value;
+    const pm = pmLire('[data-pm="mp-achat"]');
     const { error: err } = await sb.rpc('marche_acheter', {
       p_annonce_id: annonceId, p_quantite: Number(document.getElementById('mp-achat-qte').value),
-      p_mode_paiement: document.getElementById('mp-achat-mode').value, p_moyen: moyen,
-      p_carte_numero: moyen === 'carte' ? document.getElementById('mp-achat-carte-numero').value : null,
-      p_carte_nip: moyen === 'carte' ? document.getElementById('mp-achat-carte-nip').value : null,
-      p_cib: moyen === 'cib' ? document.getElementById('mp-achat-cib').value : null
+      p_mode_paiement: document.getElementById('mp-achat-mode').value, ...pmParamsRpc(pm)
     });
+    if (!err) await pmSauverSiDemande(pm);
     entMsg('mp-achat-message', err, 'Achat effectué — facture dans Mes achats.');
     if (!err) mpChargerMesAchats();
   };
@@ -7039,7 +7191,7 @@ async function mpChargerMesAchats() {
     <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(a.titre)}</strong> — ${fmtR(a.montant_total)} R$ — <em>${escHtml(a.statut_livraison)}</em></div>
       <p class="pm-mini">Vendeur : @${escHtml(a.vendeur)} — quantité : ${a.quantite} — ${escHtml(a.mode_paiement)}</p>
       ${a.facture_albatros ? `<p class="pm-mini">Albatros : ${a.facture_albatros.mois_payes}/${a.facture_albatros.mois_total} mois payés (${fmtR(a.facture_albatros.montant_mensuel)} R$/mois)
-        ${a.facture_albatros.statut === 'active' ? `<button class="pc-lien" data-mp-verser="${a.facture_albatros.id}">Payer le versement</button>` : ' — complété'}</p>` : ''}
+        ${a.facture_albatros.statut === 'active' ? `${pmZone('alb-' + a.facture_albatros.id)}<button class="pc-lien" data-mp-verser="${a.facture_albatros.id}">Payer le versement</button>` : ' — complété'}</p>` : ''}
       ${a.statut_livraison !== 'recu' && a.statut_livraison !== 'conteste' ? `
         <div class="pm-ligne-boutons">
           <button class="bouton bouton-or" style="border:none; cursor:pointer;" data-mp-recu="${a.id}">Marquer reçu + évaluer</button>
@@ -7085,9 +7237,11 @@ async function mpChargerMesAchats() {
     };
   });
 
+  pmMonter('[data-pm^="alb-"]');
   zone.querySelectorAll('[data-mp-verser]').forEach(b => b.onclick = async () => {
-    const { error: err } = await sb.rpc('payer_versement_albatros', { p_facture_id: b.dataset.mpVerser });
-    if (err) alert(err.message); else mpChargerMesAchats();
+    const pm = pmLire(`[data-pm="alb-${b.dataset.mpVerser}"]`);
+    const { error: err } = await sb.rpc('payer_versement_albatros', { p_facture_id: b.dataset.mpVerser, ...pmParamsRpc(pm) });
+    if (err) alert(err.message); else { await pmSauverSiDemande(pm); mpChargerMesAchats(); }
   });
   zone.querySelectorAll('[data-mp-recu]').forEach(b => b.onclick = () => {
     const z = document.getElementById('mp-recu-zone-' + b.dataset.mpRecu);
@@ -7181,7 +7335,7 @@ function panneauBureauPosteHTML() {
         <p class="pm-mini">Associe une de vos annonces ou entreprises à un bureau de poste pour la livraison. Donne un code temporaire une fois acceptée.</p>
         <div class="pc-champ"><label>Bureau de poste</label><select id="bp-aff-bureau"></select></div>
         <div class="pc-champ"><label>Cible</label><select id="bp-aff-type"><option value="entreprise">Une de mes entreprises (PDG/Co-PDG)</option><option value="annonce">Une de mes annonces</option></select></div>
-        <div class="pc-champ"><label>ID de la cible</label><input type="text" id="bp-aff-cible-id"></div>
+        <div class="pc-champ"><label>Cible</label><select id="bp-aff-cible-id"></select></div>
         <div class="pc-champ"><label>Justification (10 caractères min.)</label><textarea id="bp-aff-justif"></textarea></div>
         <div class="pc-champ"><label>Durée (jours)</label><input type="number" min="1" id="bp-aff-duree" value="30"></div>
         <div class="pc-champ"><label>Unité</label><select id="bp-aff-unite"><option value="km">Kilomètre</option><option value="m">Mètre</option></select></div>
@@ -7200,6 +7354,18 @@ async function initialiserPanneauBureauPoste() {
   const [{ data: mesBureaux }, { data: toutes }] = await Promise.all([sb.rpc('mon_bureau_poste'), sb.rpc('bureau_poste_liste_publique')]);
   document.getElementById('bp-aff-bureau').innerHTML = (toutes || []).map(b => `<option value="${b.id}">${escHtml(b.nom)}${b.note && b.note.note != null ? ' — ' + b.note.note + '/5' : ''}</option>`).join('');
 
+  const bpMajCibles = async () => {
+    const sel = document.getElementById('bp-aff-cible-id');
+    if (document.getElementById('bp-aff-type').value === 'entreprise') {
+      const { data } = await rpcSafe('mes_entreprises', {}, []);
+      sel.innerHTML = (data || []).filter(e => /pdg/i.test(e.role || '')).map(e => `<option value="${escHtml(e.id)}">${escHtml(e.nom)} (${escHtml(e.code || '')})</option>`).join('') || '<option value="">Aucune entreprise dont vous êtes PDG</option>';
+    } else {
+      const { data } = await rpcSafe('mes_annonces_marche', {}, []);
+      sel.innerHTML = (data || []).map(a => `<option value="${escHtml(a.id)}">${escHtml(a.titre)}</option>`).join('') || '<option value="">Aucune annonce</option>';
+    }
+  };
+  document.getElementById('bp-aff-type').onchange = bpMajCibles;
+  bpMajCibles();
   bpRenduMesBureaux(mesBureaux || []);
   bpChargerMesAffiliations();
 
@@ -7434,11 +7600,15 @@ async function initialiserPanneauPolice() {
   zone.innerHTML = poste ? `
     <p class="pm-mini">Commissariat : <strong>${escHtml(poste.comisseriat_nom)}</strong> (${escHtml(poste.comisseriat_type)})</p>
     <p class="pm-mini">Matricule : ${escHtml(poste.matricule)} — Grade : ${escHtml(poste.nom_grade)} (${poste.sous_grade === 3 ? '1re' : poste.sous_grade === 2 ? '2e' : '3e'} classe)${poste.est_directeur ? ' — Directeur' : ''}</p>
-    <div class="pc-champ"><label>Commissariat de destination (ID)</label><input type="text" id="pol-transfert-dest"></div>
+    <div class="pc-champ"><label>Commissariat de destination</label><select id="pol-transfert-dest"></select></div>
     <button class="pc-lien" id="pol-demander-transfert">Demander un transfert</button>
     <div id="pol-transfert-message"></div>` : '<p class="pm-mini">Vous n\'occupez aucun poste policier actuellement.</p>';
 
   if (poste) {
+    rpcSafe('liste_comisseriats', {}, []).then(({ data }) => {
+      const sel = document.getElementById('pol-transfert-dest');
+      if (sel) sel.innerHTML = (data || []).filter(c => c.id !== poste.comisseriat_id).map(c => `<option value="${escHtml(c.id)}">${escHtml(c.nom)} (${escHtml(c.code || '')})</option>`).join('');
+    });
     document.getElementById('pol-demander-transfert').onclick = async () => {
       const { error } = await sb.rpc('comisseriat_demander_transfert', { p_comisseriat_dest: document.getElementById('pol-transfert-dest').value });
       entMsg('pol-transfert-message', error, 'Demande de transfert envoyée.');
@@ -7451,7 +7621,7 @@ async function initialiserPanneauPolice() {
   zoneListe.innerHTML = (commissariats || []).length ? commissariats.map(c => `
     <div class="pm-fleet-item"><div class="entete"><strong>${escHtml(c.nom)}</strong> (${escHtml(c.type)})
       ${(poste && poste.est_directeur && poste.comisseriat_id === c.id) || (poste && poste.comisseriat_id === c.id) ? `<button class="bouton bouton-contour" style="color:var(--vert-nuit); border-color:var(--vert-nuit); cursor:pointer; font-size:.78rem; padding:6px 14px;" data-pol-gerer="${c.id}">Gérer</button>` : ''}</div>
-      <p class="pm-mini">ID : ${escHtml(c.id)} — Directeur : @${escHtml(c.directeur || '—')} — effectif : ${c.effectif}${c.adresse ? ' — ' + escHtml(c.adresse) : ''}</p>
+      <p class="pm-mini">Numéro de suivi : ${escHtml(c.code || '')} — Directeur : @${escHtml(c.directeur || '—')} — effectif : ${c.effectif}${c.adresse ? ' — ' + escHtml(c.adresse) : ''}</p>
     </div>`).join('') : '<p class="pm-mini">Aucun commissariat.</p>';
   zoneListe.querySelectorAll('[data-pol-gerer]').forEach(b => b.onclick = () => polOuvrirGestion(b.dataset.polGerer));
 
@@ -7491,7 +7661,7 @@ async function initialiserPanneauPolice() {
       const fichier = document.getElementById('pol-inf-preuve').files[0];
       if (fichier) {
         const { data: { user } } = await sb.auth.getUser();
-        const chemin = `${user.id}/${Date.now()}-${fichier.name}`;
+        const chemin = `${user.id}/${Date.now()}-${nomFichierSur(fichier.name)}`;
         const { error: errUpload } = await sb.storage.from('documents-citoyens').upload(chemin, fichier);
         if (errUpload) throw errUpload;
         preuves = [chemin];
