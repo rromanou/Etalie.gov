@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Portail citoyen — Gouvernement d'Étalie</title>
-<meta content="Espace personnel des citoyens d'Étalie : identification, trésorerie, prêts et messages." name="description"/>
+<title>Portail citoyen — Gouvernement de Romance</title>
+<meta content="Espace personnel des citoyens de Romance : identification, trésorerie, prêts et messages." name="description"/>
 <link href="assets/favicon.svg" rel="icon" type="image/svg+xml"/>
 <link href="assets/favicon.ico" rel="icon" type="image/x-icon"/>
 <link href="css/styles.css" rel="stylesheet"/>
@@ -123,7 +123,7 @@
 <body data-page="portail-citoyen">
 <div class="bandeau-utilitaire">
 <div class="conteneur">
-<span><span class="puce"></span><span data-i18n="t001">République d'Étalie — Site officiel du gouvernement</span></span>
+<span><span class="puce"></span><span data-i18n="t001">République de Romance — Site officiel du gouvernement</span></span>
 <div class="liens-util">
 <a data-i18n="t002" href="roie.html">Notre Roîe</a>
   <a data-i18n="XXXXXX" href="azgaar.html">Cartes Azgaar</a>
@@ -137,10 +137,10 @@
 <header class="entete">
 <div class="conteneur">
 <div class="identite">
-<img alt="Blason d'Étalie" height="58" src="assets/blason-etalie.png" style="object-fit:contain;" width="44"/>
+<img alt="Blason de Romance" height="58" src="assets/blason-etalie.png" style="object-fit:contain;" width="44"/>
 <div class="texte-identite">
-<span class="surtitre" data-i18n="t005">République d'Étalie</span>
-<h1 data-i18n="t006">Gouvernement d'Étalie</h1>
+<span class="surtitre" data-i18n="t005">République de Romance</span>
+<h1 data-i18n="t006">Gouvernement de Romance</h1>
 </div>
 </div>
 <nav aria-label="Navigation principale" class="principale">
@@ -175,8 +175,8 @@
 <div class="conteneur">
 <div class="pied-grille" style="grid-template-columns:1.1fr repeat(4,1fr);">
 <div>
-<h5 data-i18n="t020">Gouvernement d'Étalie</h5>
-<p data-i18n="t021" style="max-width:30ch; font-size:.88rem;">Site officiel de la République d'Étalie. Toute reproduction des symboles de l'État est soumise à autorisation.</p>
+<h5 data-i18n="t020">Gouvernement de Romance</h5>
+<p data-i18n="t021" style="max-width:30ch; font-size:.88rem;">Site officiel de la République de Romance. Toute reproduction des symboles de l'État est soumise à autorisation.</p>
 <li><a data-i18n="t022" href="z-conditions.html">Conditions et traitement des données</a></li>
 </div>
 <div>
@@ -185,7 +185,7 @@
 <li><a data-i18n="t024" href="gouvernement.html">Gouvernement</a></li>
 <li><a data-i18n="t025" href="provinces.html">Provinces &amp; municipalités</a></li>
 <li><a data-i18n="t026" href="protectorats.html">Protectorats</a></li>
-<li><a data-i18n="t027" href="histoire.html">Histoire d'Étalie</a></li>
+<li><a data-i18n="t027" href="histoire.html">Histoire de Romance</a></li>
 </ul>
 </div>
 <div>
@@ -217,7 +217,7 @@
 </div>
 </div>
 <div class="pied-bas">
-<span data-i18n="t042">© 2023 – 2026 République d'Étalie — Tous droits réservés</span>
+<span data-i18n="t042">© 2023 – 2026 République de Romance — Tous droits réservés</span>
 <span data-i18n="t043">Site fictif à des fins narratives</span>
 </div>
 </div>
@@ -259,7 +259,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
    --------------------------------------------------------------------- */
 const TABLE_CAS = { '1':'Q','2':'E','3':'Z','4':'V','5':'X','6':'T','7':'H','8':'N','9':'B','0':'K' };
 /* =====================================================================
-   NOM LÉGAL ÉTALIEN — auf näm / dwai näm / (hwol|hw.) / trius näm (ou
+   NOM LÉGAL ROMANÇOIS — auf näm / dwai näm / (hwol|hw.) / trius näm (ou
    abréviation d'une lettre). 2 à 4 mots, voir validerNomLegal().
    ===================================================================== */
 const NL_MIN = "abcdeghikmnoprstuvwyzäöíüëŕ";
@@ -400,6 +400,7 @@ async function trouverDansRegistreCAS(codeEncrypte, forcerRechargement) {
 
 // Provinces de résidence — déterminent quelle Banque Nationale paie le
 // salaire du citoyen (voir supabase/sql/patch-presse-monetaire.sql).
+function nomAffichePays(t) { return String(t).replace(/Étalie/g, 'Romance').replace(/Étal(?:ien|ois)/g, 'Romançois'); }
 const PROVINCES_RESIDENCE = [
   "Gibaltage","Talon Étalien","Talon Andrien","Fleury","Baxe","Vénésie","Marcio","Romagna",
   "Grâdes-Tivainne","Aloies","Balques","Alanbie-Brien-Jance","Île Saint-Étienne","Ombrie","Vénéz","Milela",
@@ -583,7 +584,7 @@ function afficherConnexion(messageErreur) {
     const res = validerNomLegal(e.target.value);
     zone.innerHTML = res.valide ? '<p class="pc-succes" style="margin:0;">Format valide.</p>' : `<p class="pc-erreur" style="margin:0;">${res.erreur}</p>`;
   });
-  document.getElementById('i-province').innerHTML += PROVINCES_RESIDENCE.map(p => `<option value="${p}">${p}</option>`).join('');
+  document.getElementById('i-province').innerHTML += PROVINCES_RESIDENCE.map(p => `<option value="${p}">${nomAffichePays(p)}</option>`).join('');
   initialiserFormulaireDemandeCas();
   initialiserConnexionConseiller();
 
@@ -606,7 +607,7 @@ function basculerOnglet(nom) {
 /* =====================================================================
    FORMULAIRE — DEMANDE D'ASSURANCE SOCIALE
    ===================================================================== */
-const PAYS_DEMANDE_CAS = ["Dimensionworld","Étalie","Nouveau-Dimen","Duché Nordique","Coulle",
+const PAYS_DEMANDE_CAS = ["Dimensionworld","Romance","Nouveau-Dimen","Duché Nordique","Coulle",
   "Zitiareatxia-Ungry","Arabie Nordique","Duché de Winvlor","Duché Élidien","Montcurie",
   "Confédération des 8 tribus","Izirel","Chagne","Rolican","Degia","Delîle","Zagasoroz",
   "Ginessemanne","Cheauvilleresia","Éton"];
@@ -634,7 +635,7 @@ function formulaireDemandeCasHTML() {
       <p style="font-size:.85rem; color:var(--gris-ardoise); margin-bottom:18px;">
         Ce formulaire transmet votre demande à l'administration pour étude. L'obtention effective
         d'un CAS et sa remise (en personne, à l'ambassade) restent à la discrétion du gouvernement
-        d'Étalie.
+        de Romance.
       </p>
 
       <div class="pc-champ">
@@ -647,7 +648,7 @@ function formulaireDemandeCasHTML() {
       <div class="pc-champ"><label for="d-naissance">Date de naissance</label><input type="date" id="d-naissance"></div>
       <div class="pc-champ"><label for="d-email">Adresse courriel de contact</label><input type="email" id="d-email"></div>
       <div class="pc-champ"><label for="d-adresse-origine">Adresse de résidence dans votre pays d'origine</label><input type="text" id="d-adresse-origine"></div>
-      <div class="pc-champ"><label for="d-adresse-etalie">Adresse de résidence en Étalie (preuve d'habitation)</label><input type="text" id="d-adresse-etalie"></div>
+      <div class="pc-champ"><label for="d-adresse-etalie">Adresse de résidence en Romance (preuve d'habitation)</label><input type="text" id="d-adresse-etalie"></div>
       <div class="pc-champ"><label for="d-duree">Durée passée sur le territoire</label><input type="text" id="d-duree" placeholder="ex: 6 mois"></div>
 
       <div class="pc-champ">
@@ -691,7 +692,7 @@ function formulaireDemandeCasHTML() {
       </div>
 
       <div class="pc-champ">
-        <label for="d-contribution">Comment contribuez-vous à la société Étalienne ? (minimum 100 caractères)</label>
+        <label for="d-contribution">Comment contribuez-vous à la société Romançoise ? (minimum 100 caractères)</label>
         <textarea id="d-contribution"></textarea>
       </div>
 
@@ -1245,7 +1246,7 @@ async function chargerTableauDeBord(utilisateur) {
             <option value="travail">Permis de travail — Gratuit, permanent - il est obligatoire pour pouvoir posséder un travail, il faut avoir la citoyenneté.</option>
             <option value="coupe">Permis de récolte forestière — 4999,99 R$ + taxes (10 % TAN + 5 % Taxe Digitale), renouvelable à chaque deux années - il est obligatoire pour pouvoir couper, récolter du bois dans les forêts pour ça uniquement.</option>
             <option value="mine">Permis minier — 14999,99 R$ + taxes (10 % TAN + 5 % Taxe Digitale), renouvelable à chaque deux années - il est obligatoire pour pouvoir miner dans les mines réservées à cela.</option>
-            <option value="camping">Permis d'établissement d'un camping permanent — 59,99 R$ + taxes (10 % TAN + 5 % Taxe Digitale), renouvelable chaque 5 années - il est obligatoire pour camper plus que la limite de 15 jours sans permis, il permet de camper 2-6 mois au même endroit par année, 3 mois pour la Baxe, 6 mois pour le Talon-Étalien, 2 mois pour le Talon Andrien, 4 mois pour la Vénésie, 2 mois pour la Hors-Grande-Vénésie, 2 mois pour la Ombrie, 2 mois pour la Isulae, 2 mois pour la Balques, 5 mois pour la Bushard Bay, 6 mois pour la Tonawa.</option>
+            <option value="camping">Permis d'établissement d'un camping permanent — 59,99 R$ + taxes (10 % TAN + 5 % Taxe Digitale), renouvelable chaque 5 années - il est obligatoire pour camper plus que la limite de 15 jours sans permis, il permet de camper 2-6 mois au même endroit par année, 3 mois pour la Baxe, 6 mois pour le Talon-Romançois, 2 mois pour le Talon Andrien, 4 mois pour la Vénésie, 2 mois pour la Hors-Grande-Vénésie, 2 mois pour la Ombrie, 2 mois pour la Isulae, 2 mois pour la Balques, 5 mois pour la Bushard Bay, 6 mois pour la Tonawa.</option>
             <option value="construire">Permis de construction sur un territoire acheté au préalable — 2099,99 R$ + taxes (10 % TAN + 5 % Taxe Digitale), permanent - il est obligatoire pour construire quelque chose sur un terrain qui leurs appartient déjà.</option>
             <option value="drone">Permis de transport de valeur — 9999,99 R$ + taxes (10 % TAN + 5 % Taxe Digitale), permanent - il est obligatoire si la personne au lieu que sa limite d'argent sur lui-même soit 5000R$, elle montera à 23400R$</option>
             <option value="agriculture">Permis d'élevage agricole — 765,59 R$ + taxes (10 % TAN + 5 % Taxe Digitale), renouvelable chaque trois années - il est obligatoire pour pouvoir élever des animeaux non-domestiques (de maison).</option>
@@ -1601,7 +1602,7 @@ function rendreMessage(m, estAdminConnecte) {
   const estGouv = m.type === 'gouvernemental';
   const estAgent = m.type === 'agent';
   const estOfficiel = estGouv || estAgent;
-  const nomExpediteur = estGouv ? (m.nom_affiche || 'Gouvernement d\'Étalie') : (estAgent ? (m.nom_affiche || 'Agent de la paix') : 'Citoyen');
+  const nomExpediteur = estGouv ? (m.nom_affiche || 'Gouvernement de Romance') : (estAgent ? (m.nom_affiche || 'Agent de la paix') : 'Citoyen');
   const classeAvert = m.est_avertissement ? ' avertissement' : '';
   return `
     <div class="pc-message${classeAvert}">
@@ -7154,7 +7155,7 @@ async function initialiserPanneauMarchePublic() {
   const optsCat = (cats || []).map(c => `<option value="${c.code}">${escHtml(c.nom)} (${c.taux}%)</option>`).join('');
   document.getElementById('mp-categorie').innerHTML = optsCat;
   document.getElementById('mp-filtre-categorie').innerHTML += optsCat;
-  document.getElementById('mp-province').innerHTML = PROVINCES_RESIDENCE.map(p => `<option value="${p}">${p}</option>`).join('');
+  document.getElementById('mp-province').innerHTML = PROVINCES_RESIDENCE.map(p => `<option value="${p}">${nomAffichePays(p)}</option>`).join('');
   document.getElementById('mp-vendeuse').innerHTML += (vendeuses || []).map(v => `<option value="${v.id}">${escHtml(v.nom)}</option>`).join('');
 
   const majChampsLivraison = () => {
