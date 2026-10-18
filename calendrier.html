@@ -1,11 +1,9 @@
-on peut tu empêcher que ça dise avant la fondation toutou <!DOCTYPE html>
-
 <html lang="fr">
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Calendrier toutouïen — Gouvernement d'Étalie</title>
-<meta content="Le système officiel de datation d'Étalie, avec convertisseur." name="description"/>
+<title>Calendrier toutouïen — Gouvernement d'Romance</title>
+<meta content="Le système officiel de datation d'Romance, avec convertisseur." name="description"/>
 <link href="assets/favicon.svg" rel="icon" type="image/svg+xml"/>
 <link href="assets/favicon.ico" rel="icon" type="image/x-icon"/>
 <link href="css/styles.css" rel="stylesheet"/>
@@ -13,7 +11,7 @@ on peut tu empêcher que ça dise avant la fondation toutou <!DOCTYPE html>
 <body data-page="calendrier">
 <div class="bandeau-utilitaire">
 <div class="conteneur">
-<span><span class="puce"></span><span data-i18n="t001">République d'Étalie — Site officiel du gouvernement</span></span>
+<span><span class="puce"></span><span data-i18n="t001">République d'Romance — Site officiel du gouvernement</span></span>
 <div class="liens-util">
 <a data-i18n="t002" href="roie.html">Notre Roîe</a>
 <a data-i18n="XXXXXX" href="azgaar.html">Cartes Azgaar</a>
@@ -27,10 +25,10 @@ on peut tu empêcher que ça dise avant la fondation toutou <!DOCTYPE html>
 <header class="entete">
 <div class="conteneur">
 <div class="identite">
-<img alt="Blason d'Étalie" height="58" src="assets/blason-etalie.png" style="object-fit:contain;" width="44"/>
+<img alt="Blason d'Romance" height="58" src="assets/blason-etalie.png" style="object-fit:contain;" width="44"/>
 <div class="texte-identite">
-<span class="surtitre" data-i18n="t005">République d'Étalie</span>
-<h1 data-i18n="t006">Gouvernement d'Étalie</h1>
+<span class="surtitre" data-i18n="t005">République d'Romance</span>
+<h1 data-i18n="t006">Gouvernement d'Romance</h1>
 </div>
 </div>
 <nav aria-label="Navigation principale" class="principale">
@@ -60,7 +58,7 @@ on peut tu empêcher que ça dise avant la fondation toutou <!DOCTYPE html>
 <div class="conteneur prose">
 <h3 data-i18n="t019">Principe</h3>
 <p><span data-i18n="t020">Le calendrier toutouïen est le système officiel de datation utilisé par les nations du Nouveau Monde, dont Étalie. Il ne compte ni mois ni semaines : uniquement des années de 30 jours toutouïens. L'An 0 débute le</span> <strong data-i18n="t023">30 septembre 2024</strong><span data-i18n="t021">, un jour avant la création officielle du premier pays (« Toutou ») le 30 septembre 2024 Tout ce qui précède l'An 0 se note en négatif ou avec la mention</span> <strong data-i18n="t024">B.T.</strong> <span data-i18n="t022">(Avant Toutou).</span></p>
-<p><span data-i18n="t025">Étalie (anciennement appelé « Toutou ») a été fondée le</span> <strong data-i18n="t027">30 septembre 2024</strong><span data-i18n="t026">, soit l'An 0, jour 1 du calendrier toutouïen.</span></p>
+<p><span data-i18n="t025">Romance (anciennement appelé « Toutou ») a été fondée le</span> <strong data-i18n="t027">30 septembre 2024</strong><span data-i18n="t026">, soit l'An 0, jour 1 du calendrier toutouïen.</span></p>
 <h3 data-i18n="t028">La formule corrigée</h3>
 <p data-i18n="t029">Une erreur de calcul affectait auparavant les dates affichées sur ce site (le chiffre « 603 » utilisé par le passé n'était pas exact). La formule officielle, validée sur les exemples de référence du gouvernement, est la suivante :</p>
 <div class="table-wrap" style="margin:20px 0;">
@@ -74,7 +72,7 @@ on peut tu empêcher que ça dise avant la fondation toutou <!DOCTYPE html>
 </div>
 <p data-i18n="t036" style="font-size:.85rem; color:var(--gris-ardoise);">La partie entière donne l'année toutouïenne ; la partie décimale, multipliée par 30, donne le jour toutouïen dans cette année.</p>
 <h3 data-i18n="t037">Convertisseur officiel</h3>
-<p data-i18n="t038">Entrez une date réelle pour connaître la date toutouïenne équivalente pour Étalie (fondée le 30 septembre 2024).</p>
+<p data-i18n="t038">Entrez une date réelle pour connaître la date toutouïenne équivalente pour Romance (fondée le 30 septembre 2024).</p>
 <div style="background:var(--blanc); border:1px solid var(--gris-ligne); padding:26px; max-width:460px;">
 <label data-i18n="t039" for="date-input" style="display:block; font-family:var(--police-util); font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; color:var(--or-laiton); margin-bottom:8px;">Date réelle</label>
 <input id="date-input" style="width:100%; padding:11px 14px; border:1px solid var(--gris-ligne); border-radius:2px; margin-bottom:18px; font-size:.95rem; font-family:var(--police-texte);" type="date"/>
@@ -139,7 +137,7 @@ const val = new Date(input.value + 'T00:00:00');
     return;
   }
   resultat.textContent = `An ${r.an}, jour ${r.reste} du calendrier toutouïen`;
-  detail.textContent = `Soit ${r.jours.toLocaleString('fr-FR')} jours réels après la fondation d'Étalie (30 septembre 2024).`;
+  detail.textContent = `Soit ${r.jours.toLocaleString('fr-FR')} jours réels après la fondation d'Romance (30 septembre 2024).`;
 }
 
 input.addEventListener('input', majResultat);
@@ -148,7 +146,7 @@ input.value = aujourdhui.toISOString().slice(0,10);
 majResultat();
 
 const reperes = [
-  {nom: "Étalie", fondation: new Date('2024-09-30T07:29:00')},
+  {nom: "Romance", fondation: new Date('2024-09-30T07:29:00')},
   {nom: "Countryarm", fondation: new Date('2024-12-17T15:16:00')},
   {nom: "Dimensionworld", fondation: new Date('2025-01-29T00:00:00')},
   {nom: "Yhorule", fondation: new Date('2025-05-05T14:52:00')},
@@ -167,7 +165,7 @@ reperes.forEach(p => {
 <div class="conteneur">
 <div class="pied-grille" style="grid-template-columns:1.1fr repeat(4,1fr);">
 <div>
-<h5 data-i18n="t045">Gouvernement d'Étalie</h5>
+<h5 data-i18n="t045">Gouvernement d'Romance</h5>
 <p data-i18n="t046" style="max-width:30ch; font-size:.88rem;">Site officiel de la République d'Étalie. Toute reproduction des symboles de l'État est soumise à autorisation.</p>
 <li><a data-i18n="t047" href="z-conditions.html">Conditions et traitement des données</a></li>
 </div>
@@ -177,7 +175,7 @@ reperes.forEach(p => {
 <li><a data-i18n="t049" href="gouvernement.html">Gouvernement</a></li>
 <li><a data-i18n="t050" href="provinces.html">Provinces &amp; municipalités</a></li>
 <li><a data-i18n="t051" href="protectorats.html">Protectorats</a></li>
-<li><a data-i18n="t052" href="histoire.html">Histoire d'Étalie</a></li>
+<li><a data-i18n="t052" href="histoire.html">Histoire d'Romance</a></li>
 </ul>
 </div>
 <div>
@@ -209,7 +207,7 @@ reperes.forEach(p => {
 </div>
 </div>
 <div class="pied-bas">
-<span data-i18n="t067">© 2023 – 2026 République d'Étalie — Tous droits réservés</span>
+<span data-i18n="t067">© 2023 – 2026 République d'Romance — Tous droits réservés</span>
 <span data-i18n="t068">Site fictif à des fins narratives</span>
 </div>
 </div>
